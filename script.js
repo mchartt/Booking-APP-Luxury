@@ -518,7 +518,7 @@ async function submitBooking(formData) {
             // Mostra notifica e redirect a pagamento
             showNotification('Prenotazione creata! Redirect al pagamento...', 'success');
             setTimeout(() => {
-                window.location.href = 'payment.html';
+                window.location.href = 'payment.php';
             }, 1500);
         } else if (result.errors && Array.isArray(result.errors)) {
             // Errori di validazione dal server

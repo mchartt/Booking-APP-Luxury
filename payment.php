@@ -1,9 +1,114 @@
+<?php
+/**
+ * Payment Page - Luxury Hotel
+ * SICUREZZA: Genera token CSRF lato server e lo inietta nel meta tag
+ * HARDENING: CSP ultra-restrittiva per pagina pagamenti (anti-XSS, anti-Formjacking)
+ */
+
+// Includi gli header di sicurezza e inizializza la sessione
+require_once __DIR__ . '/api/security_headers.php';
+
+// ===== PAYMENT PAGE: CSP ULTRA-RESTRITTIVA =====
+// Sovrascrive la CSP generica con una versione specifica per pagamenti
+// Previene XSS, Formjacking, Clickjacking e data exfiltration
+
+// Ottieni il nonce generato da security_headers.php
+$nonce = CSP_NONCE;
+
+// CSP restrittiva per pagina pagamenti
+$paymentCsp = implode('; ', [
+    // Default: blocca tutto tranne 'self'
+    "default-src 'self'",
+
+    // Script: SOLO file esterni specifici + nonce (NO 'unsafe-inline', NO 'unsafe-eval')
+    "script-src 'self' 'nonce-{$nonce}' https://js.stripe.com",
+
+    // Stili: SOLO file esterni + nonce per stili inline necessari
+    "style-src 'self' 'nonce-{$nonce}' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+
+    // Font: Google Fonts + Font Awesome
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
+
+    // Immagini: solo dal nostro dominio + data URI per icone inline
+    "img-src 'self' data: https:",
+
+    // Connessioni API: SOLO nostro backend + Stripe API
+    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com",
+
+    // Frame: Stripe Elements usa iframe per PCI compliance
+    "frame-src https://js.stripe.com https://hooks.stripe.com",
+
+    // CLICKJACKING PREVENTION: nessuno può incapsulare questa pagina
+    "frame-ancestors 'none'",
+
+    // Form: SOLO submit al nostro dominio
+    "form-action 'self'",
+
+    // Base URI: previene attacchi base tag injection
+    "base-uri 'self'",
+
+    // Object/Embed: completamente disabilitati
+    "object-src 'none'",
+
+    // Worker: disabilitati (non necessari per pagamenti)
+    "worker-src 'none'",
+
+    // Manifest: solo dal nostro dominio
+    "manifest-src 'self'",
+
+    // Report violations (opzionale - configura endpoint per logging)
+    // "report-uri /api/csp-report.php"
+]);
+
+// Applica CSP restrittiva (sovrascrive quella generica)
+header("Content-Security-Policy: {$paymentCsp}", true);
+
+// ===== HEADER SICUREZZA AGGIUNTIVI PER PAGAMENTI =====
+
+// X-Content-Type-Options: previene MIME sniffing
+header('X-Content-Type-Options: nosniff', true);
+
+// X-Frame-Options: protezione clickjacking legacy (backup per CSP frame-ancestors)
+header('X-Frame-Options: DENY', true);
+
+// X-XSS-Protection: protezione XSS browser legacy
+header('X-XSS-Protection: 1; mode=block', true);
+
+// Referrer-Policy: non inviare referrer a terze parti (protegge booking_id in URL)
+header('Referrer-Policy: strict-origin-when-cross-origin', true);
+
+// Permissions-Policy: disabilita API browser non necessarie per pagamenti
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(*), usb=()', true);
+
+// Cache-Control: NON cachare pagine di pagamento (dati sensibili)
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0', true);
+header('Pragma: no-cache', true);
+header('Expires: 0', true);
+
+// HSTS: forza HTTPS (già in security_headers.php, ma rinforziamo)
+if (!in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:8080'])) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload', true);
+}
+
+// Cross-Origin headers per isolamento
+header('Cross-Origin-Opener-Policy: same-origin', true);
+header('Cross-Origin-Embedder-Policy: credentialless', true);
+
+// Genera token CSRF crittograficamente sicuro se non esiste
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+$csrfToken = $_SESSION['csrf_token'];
+?>
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
+    <!-- CSRF Token - Generato dal server, letto dal JavaScript -->
+    <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
     <title>Pagamento - Luxury Hotel</title>
 
     <!-- Preconnect for performance -->
@@ -21,7 +126,7 @@
     <link rel="stylesheet" href="payment.css">
 
     <!-- Stripe.js - PCI DSS Compliant (caricato dal CDN Stripe) -->
-    <script src="https://js.stripe.com/v3/"></script>
+    <script src="https://js.stripe.com/v3/" nonce="<?php echo htmlspecialchars($nonce, ENT_QUOTES, 'UTF-8'); ?>"></script>
 </head>
 <body>
     <!-- Header -->
@@ -295,6 +400,6 @@
     <div id="notification" class="notification"></div>
 
     <!-- JavaScript -->
-    <script src="payment.js"></script>
+    <script src="payment.js" nonce="<?php echo htmlspecialchars($nonce, ENT_QUOTES, 'UTF-8'); ?>"></script>
 </body>
 </html>

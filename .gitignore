@@ -2,16 +2,35 @@
 node_modules/
 package-lock.json
 yarn.lock
+vendor/
 
 # Database
 bookings.json
 *.db
 *.sqlite
+*.sql.backup
 
-# Environment
+# ========== SECURITY: Environment & Secrets ==========
+# IMPORTANTE: MAI committare file con credenziali!
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+.env.staging
+*.env
+
+# File di configurazione con possibili segreti
+config.local.php
+secrets.php
+credentials.json
+*.pem
+*.key
+*.crt
+
+# Stripe specifico
+stripe-keys.txt
+stripe-config.local.php
 
 # IDE
 .vscode/
@@ -23,11 +42,17 @@ bookings.json
 .DS_Store
 Thumbs.db
 *.log
+error_log
+php_errors.log
 
 # Temp
 tmp/
 temp/
 .cache/
+*.tmp
+*.bak
+*.swp
+*~
 
 # Build
 dist/

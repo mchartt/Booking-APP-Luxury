@@ -9,7 +9,36 @@ require_once __DIR__ . '/security_headers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
+// ===== HARDENING: Header sicurezza aggiuntivi per API Pagamenti =====
+// X-Content-Type-Options: previene MIME sniffing (interpreta JSON solo come JSON)
+header('X-Content-Type-Options: nosniff', true);
+
+// Cache-Control: MAI cachare risposte API di pagamento
+header('Cache-Control: no-store, no-cache, must-revalidate, private', true);
+header('Pragma: no-cache', true);
+
+// X-Frame-Options: le API non devono essere caricate in iframe
+header('X-Frame-Options: DENY', true);
+
+// Cross-Origin: restrizioni per isolamento
+header('Cross-Origin-Resource-Policy: same-origin', true);
+
 require_once '../config.php';
+
+// ===== CSRF TOKEN GENERATION =====
+// Genera token CSRF all'avvio della sessione (se non esiste)
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Endpoint per ottenere il token CSRF (chiamato dal frontend)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'csrf-token') {
+    echo json_encode([
+        'success' => true,
+        'csrf_token' => $_SESSION['csrf_token']
+    ]);
+    exit;
+}
 
 // ===== SESSION TIMEOUT & RATE LIMITING =====
 
@@ -66,6 +95,14 @@ if ($conn !== null) {
     $stmt->execute();
     $stmt->close();
 }
+
+// Carica Stripe SDK se disponibile
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+}
+
+// Configurazione Stripe (da environment)
+$stripeSecretKey = $_ENV['STRIPE_SECRET_KEY'] ?? getenv('STRIPE_SECRET_KEY') ?: '';
 
 // Configurazione pagamenti
 define('VALID_PAYMENT_METHODS', ['card', 'paypal', 'iban']);
@@ -243,23 +280,69 @@ function verifyPayment() {
 // ===== HANDLER RICHIESTE POST =====
 
 function handlePostRequest() {
+    global $conn;
+
     // SICUREZZA: Valida token CSRF
     validateCsrfToken();
 
-    $input = json_decode(file_get_contents('php://input'), true);
+    // HARDENING: Limita dimensione payload per prevenire JSON DoS
+    $maxPayloadSize = 16384; // 16KB - sufficiente per richieste di pagamento
+    $rawInput = file_get_contents('php://input');
 
-    if (!$input) {
+    if ($rawInput === false) {
         http_response_code(400);
         echo json_encode([
             'success' => false,
-            'message' => 'JSON non valido'
+            'message' => 'Impossibile leggere la richiesta'
         ]);
         return;
     }
 
-    // Validazione dati base
+    if (strlen($rawInput) > $maxPayloadSize) {
+        http_response_code(413); // Payload Too Large
+        echo json_encode([
+            'success' => false,
+            'message' => 'Richiesta troppo grande'
+        ]);
+        return;
+    }
+
+    // HARDENING: Parsing JSON con controllo errori rigoroso
+    $input = json_decode($rawInput, true);
+
+    // Controllo strict: distingue tra JSON vuoto/null e errore di parsing
+    if ($input === null && json_last_error() !== JSON_ERROR_NONE) {
+        $errorCode = json_last_error();
+        error_log('JSON Parse Error: ' . json_last_error_msg() . ' (code: ' . $errorCode . ')');
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Formato richiesta non valido'
+        ]);
+        return;
+    }
+
+    // Verifica che sia un array/oggetto valido
+    if (!is_array($input)) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Formato richiesta non valido'
+        ]);
+        return;
+    }
+
+    // Controlla se è una conferma pagamento Stripe
+    $action = $input['action'] ?? null;
+    if ($action === 'confirm_stripe_payment') {
+        confirmStripePayment($input);
+        return;
+    }
+
+    // Validazione dati base per altri metodi (paypal, iban)
+    // ZERO-TRUST: validatePaymentRequest ora recupera anche i dati dal DB
     $validation = validatePaymentRequest($input);
-    if (!$validation['valid']) {
+    if ($validation['valid'] !== true) {
         http_response_code(400);
         echo json_encode([
             'success' => false,
@@ -269,20 +352,44 @@ function handlePostRequest() {
         return;
     }
 
+    // ZERO-TRUST: Recupera l'importo autoritativo dal database
+    $bookingId = trim($input['booking_id']);
+    $bookingData = checkBookingForPayment($bookingId);
+
+    if ($bookingData['valid'] !== true || $bookingData['booking'] === null) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Impossibile recuperare dati prenotazione',
+            'errors' => $bookingData['errors'] ?? ['Errore interno']
+        ]);
+        return;
+    }
+
+    // L'importo viene ESCLUSIVAMENTE dal database
+    $authoritativeAmount = $bookingData['booking']['amount'];
+
     // Processa in base al metodo
     $method = $input['method'];
 
     switch ($method) {
         case 'card':
-            processCardPayment($input);
+            // PCI-DSS: I pagamenti carta devono passare SOLO tramite Stripe
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'I pagamenti con carta devono essere processati tramite Stripe Elements'
+            ]);
             break;
 
         case 'paypal':
-            processPayPalPayment($input);
+            // ZERO-TRUST: Passa l'importo dal DB, non dal client
+            processPayPalPayment($bookingId, $authoritativeAmount);
             break;
 
         case 'iban':
-            processIBANPayment($input);
+            // ZERO-TRUST: Passa l'importo dal DB, non dal client
+            processIBANPayment($bookingId, $authoritativeAmount);
             break;
 
         default:
@@ -295,34 +402,29 @@ function handlePostRequest() {
 }
 
 /**
- * Valida richiesta pagamento
+ * Valida richiesta pagamento (ZERO-TRUST: non accetta importo dal client)
  */
 function validatePaymentRequest($data) {
     $errors = [];
 
-    // Campi obbligatori
+    // Campi obbligatori (amount NON è più accettato dal client)
     if (empty($data['booking_id'])) {
         $errors[] = 'ID prenotazione obbligatorio';
     } elseif (!validateBookingId($data['booking_id'])) {
         $errors[] = 'ID prenotazione non valido';
     }
 
-    if (empty($data['amount'])) {
-        $errors[] = 'Importo obbligatorio';
-    } elseif (!is_numeric($data['amount']) || $data['amount'] <= 0 || $data['amount'] > 100000) {
-        $errors[] = 'Importo non valido';
-    }
-
     if (empty($data['method'])) {
         $errors[] = 'Metodo di pagamento obbligatorio';
-    } elseif (!in_array($data['method'], VALID_PAYMENT_METHODS)) {
+    } elseif (!in_array($data['method'], VALID_PAYMENT_METHODS, true)) {
         $errors[] = 'Metodo di pagamento non supportato';
     }
 
     // Verifica che la prenotazione esista e non sia già pagata
+    // ZERO-TRUST: L'importo viene recuperato dal DB, non validato dal client
     if (empty($errors) && !empty($data['booking_id'])) {
-        $bookingCheck = checkBookingForPayment($data['booking_id'], $data['amount']);
-        if (!$bookingCheck['valid']) {
+        $bookingCheck = checkBookingForPayment($data['booking_id']);
+        if ($bookingCheck['valid'] !== true) {
             $errors = array_merge($errors, $bookingCheck['errors']);
         }
     }
@@ -334,12 +436,17 @@ function validatePaymentRequest($data) {
 }
 
 /**
- * Verifica prenotazione per pagamento
+ * Verifica prenotazione per pagamento e recupera importo autoritativo
+ * ZERO-TRUST: Non accetta importo dal client, lo legge solo dal DB
+ *
+ * @param string $bookingId ID prenotazione
+ * @return array ['valid' => bool, 'errors' => array, 'booking' => array|null]
  */
-function checkBookingForPayment($bookingId, $amount) {
+function checkBookingForPayment($bookingId) {
     global $conn;
 
     $errors = [];
+    $booking = null;
     $bookingId = trim($bookingId);
 
     $stmt = $conn->prepare("SELECT id, total_price, payment_status, status FROM prenotazioni WHERE booking_id = ?");
@@ -362,17 +469,29 @@ function checkBookingForPayment($bookingId, $amount) {
             $errors[] = 'La prenotazione è già stata pagata';
         }
 
-        // Verifica importo (tolleranza di 0.01 per arrotondamenti)
-        if (abs(floatval($row['total_price']) - floatval($amount)) > 0.01) {
-            $errors[] = 'Importo non corrispondente alla prenotazione';
+        // ZERO-TRUST: Recupera l'importo autoritativo dal database
+        $amount = floatval($row['total_price']);
+
+        // Sanity check sull'importo nel DB
+        if ($amount <= 0 || $amount > 100000) {
+            $errors[] = 'Importo prenotazione non valido nel database';
         }
+
+        // Restituisci i dati della prenotazione per uso successivo
+        $booking = [
+            'id' => $row['id'],
+            'amount' => $amount,
+            'payment_status' => $row['payment_status'],
+            'status' => $row['status']
+        ];
     }
 
     $stmt->close();
 
     return [
         'valid' => count($errors) === 0,
-        'errors' => $errors
+        'errors' => $errors,
+        'booking' => $booking
     ];
 }
 
@@ -385,41 +504,121 @@ function validateBookingId($bookingId) {
 }
 
 /**
- * Processa pagamento con carta
+ * Conferma pagamento Stripe dopo completamento frontend
+ *
+ * PCI-DSS COMPLIANT: Questa funzione NON riceve MAI dati carta.
+ * Riceve solo il payment_intent_id dal frontend e verifica con Stripe
+ * che il pagamento sia effettivamente completato.
+ *
+ * @param array $data Dati dalla richiesta (booking_id, payment_intent_id)
  */
-function processCardPayment($data) {
-    global $conn;
+function confirmStripePayment($data) {
+    global $conn, $stripeSecretKey;
 
     try {
-        // In produzione: qui ci sarebbe l'integrazione con Stripe/Braintree/etc.
-        // Per demo, simuliamo il processo
+        $bookingId = trim($data['booking_id'] ?? '');
+        $paymentIntentId = trim($data['payment_intent_id'] ?? '');
 
-        $bookingId = trim($data['booking_id']);
-        $amount = floatval($data['amount']);
-        $cardLastFour = trim($data['card_last_four'] ?? '****');
-        $cardBrand = trim($data['card_brand'] ?? 'unknown');
+        // Validazione input
+        if (!validateBookingId($bookingId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'ID prenotazione non valido'
+            ]);
+            return;
+        }
 
-        // Genera transaction ID
-        $transactionId = 'TXN_' . date('YmdHis') . '_' . bin2hex(random_bytes(8));
+        if (empty($paymentIntentId) || !preg_match('/^pi_[a-zA-Z0-9]+$/', $paymentIntentId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Payment Intent ID non valido'
+            ]);
+            return;
+        }
 
-        // Inizia transazione
+        // Verifica che Stripe sia configurato
+        if (empty($stripeSecretKey) || strpos($stripeSecretKey, 'XXXX') !== false) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Sistema di pagamento non configurato'
+            ]);
+            return;
+        }
+
+        // Inizializza Stripe
+        \Stripe\Stripe::setApiKey($stripeSecretKey);
+
+        // Recupera il PaymentIntent da Stripe per verificarne lo stato
+        $paymentIntent = \Stripe\PaymentIntent::retrieve($paymentIntentId);
+
+        // Verifica che il booking_id corrisponda (metadati)
+        $storedBookingId = $paymentIntent->metadata['booking_id'] ?? '';
+        if ($storedBookingId !== $bookingId) {
+            error_log("Payment mismatch: stored=$storedBookingId, received=$bookingId");
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Prenotazione non corrispondente'
+            ]);
+            return;
+        }
+
+        // Verifica lo stato del pagamento
+        if ($paymentIntent->status !== 'succeeded') {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Il pagamento non è stato completato',
+                'payment_status' => $paymentIntent->status
+            ]);
+            return;
+        }
+
+        // Pagamento confermato! Aggiorna il database
         $conn->begin_transaction();
 
-        // Inserisci record pagamento
+        // Estrai info carta in modo sicuro (Stripe maschera il PAN)
+        $paymentMethod = $paymentIntent->payment_method;
+        $cardBrand = 'card';
+        $cardLastFour = '****';
+
+        if ($paymentMethod) {
+            try {
+                $pm = \Stripe\PaymentMethod::retrieve($paymentMethod);
+                if (isset($pm->card)) {
+                    $cardBrand = $pm->card->brand ?? 'card';
+                    $cardLastFour = $pm->card->last4 ?? '****';
+                }
+            } catch (Exception $e) {
+                // Non critico, usiamo valori default
+            }
+        }
+
+        // Aggiorna stato prenotazione
+        updateBookingPaymentStatus($bookingId, 'completed', 'card', $paymentIntentId);
+
+        // Se esiste tabella payments, inserisci record
         $stmt = $conn->prepare("INSERT INTO payments
             (booking_id, transaction_id, amount, method, card_last_four, card_brand, status, created_at)
-            VALUES (?, ?, ?, 'card', ?, ?, 'completed', NOW())");
+            VALUES (?, ?, ?, 'card', ?, ?, 'completed', NOW())
+            ON DUPLICATE KEY UPDATE status = 'completed', card_last_four = ?, card_brand = ?");
 
-        if (!$stmt) {
-            // Se la tabella payments non esiste, aggiorna solo prenotazioni
-            updateBookingPaymentStatus($bookingId, 'completed', 'card', $transactionId);
-        } else {
-            $stmt->bind_param("ssdss", $bookingId, $transactionId, $amount, $cardLastFour, $cardBrand);
+        if ($stmt) {
+            $amount = $paymentIntent->amount / 100; // Da centesimi a euro
+            $stmt->bind_param("ssdssss",
+                $bookingId,
+                $paymentIntentId,
+                $amount,
+                $cardLastFour,
+                $cardBrand,
+                $cardLastFour,
+                $cardBrand
+            );
             $stmt->execute();
             $stmt->close();
-
-            // Aggiorna stato prenotazione
-            updateBookingPaymentStatus($bookingId, 'completed', 'card', $transactionId);
         }
 
         $conn->commit();
@@ -427,37 +626,47 @@ function processCardPayment($data) {
         http_response_code(200);
         echo json_encode([
             'success' => true,
-            'message' => 'Pagamento completato con successo',
-            'transaction_id' => $transactionId,
+            'message' => 'Pagamento confermato con successo',
+            'transaction_id' => $paymentIntentId,
             'payment_method' => 'card',
-            'amount' => $amount
+            'amount' => $paymentIntent->amount / 100
+        ]);
+
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        error_log('Stripe Error (confirm): ' . $e->getMessage());
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Pagamento non trovato o non valido'
         ]);
 
     } catch (Exception $e) {
-        $conn->rollback();
-        error_log('Card Payment Error: ' . $e->getMessage());
-
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollback();
+        }
+        error_log('Confirm Payment Error: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false,
-            'message' => 'Errore nell\'elaborazione del pagamento',
-            'errors' => ['Si è verificato un errore. Riprova o contatta l\'assistenza.']
+            'message' => 'Errore nella conferma del pagamento'
         ]);
     }
 }
 
 /**
  * Processa pagamento PayPal
+ * ZERO-TRUST: L'importo viene passato dal chiamante (recuperato dal DB),
+ * non accettato dal client
+ *
+ * @param string $bookingId ID prenotazione
+ * @param float $amount Importo autoritativo dal database
  */
-function processPayPalPayment($data) {
+function processPayPalPayment($bookingId, $amount) {
     global $conn;
 
     try {
         // In produzione: qui ci sarebbe l'integrazione con PayPal SDK
         // Per demo, simuliamo il redirect
-
-        $bookingId = trim($data['booking_id']);
-        $amount = floatval($data['amount']);
 
         // Genera transaction ID
         $transactionId = 'PP_' . date('YmdHis') . '_' . bin2hex(random_bytes(8));
@@ -493,14 +702,16 @@ function processPayPalPayment($data) {
 
 /**
  * Processa conferma pagamento IBAN
+ * ZERO-TRUST: L'importo viene passato dal chiamante (recuperato dal DB),
+ * non accettato dal client
+ *
+ * @param string $bookingId ID prenotazione
+ * @param float $amount Importo autoritativo dal database
  */
-function processIBANPayment($data) {
+function processIBANPayment($bookingId, $amount) {
     global $conn;
 
     try {
-        $bookingId = trim($data['booking_id']);
-        $amount = floatval($data['amount']);
-
         // Genera reference ID per bonifico
         $referenceId = 'BNF_' . date('YmdHis') . '_' . bin2hex(random_bytes(4));
 
@@ -538,6 +749,7 @@ function processIBANPayment($data) {
 /**
  * Aggiorna stato pagamento prenotazione
  * SICUREZZA: Usa prepared statements per prevenire SQL injection
+ * HARDENING: Messaggi di errore generici per prevenire Information Disclosure
  */
 function updateBookingPaymentStatus($bookingId, $status, $method, $transactionId) {
     global $conn;
@@ -546,14 +758,18 @@ function updateBookingPaymentStatus($bookingId, $status, $method, $transactionId
     $validStatuses = ['pending', 'processing', 'completed', 'failed', 'pending_transfer', 'refunded'];
     $validMethods = ['card', 'paypal', 'iban', 'unknown'];
 
+    // HARDENING: Log dettagliato lato server, messaggio generico per Information Disclosure prevention
     if (!in_array($status, $validStatuses, true)) {
-        throw new Exception('Stato pagamento non valido');
+        error_log('updateBookingPaymentStatus: stato non valido - ' . $status);
+        throw new Exception('Operazione non consentita');
     }
     if (!in_array($method, $validMethods, true)) {
-        throw new Exception('Metodo pagamento non valido');
+        error_log('updateBookingPaymentStatus: metodo non valido - ' . $method);
+        throw new Exception('Operazione non consentita');
     }
     if (!validateBookingId($bookingId)) {
-        throw new Exception('ID prenotazione non valido');
+        error_log('updateBookingPaymentStatus: booking_id non valido - ' . substr($bookingId, 0, 20));
+        throw new Exception('Operazione non consentita');
     }
 
     // Verifica se le colonne pagamento esistono
@@ -584,22 +800,25 @@ function updateBookingPaymentStatus($bookingId, $status, $method, $transactionId
         $stmt->bind_param("ss", $newStatus, $bookingId);
     }
 
-    if (!$stmt) {
+    // HARDENING: Controllo statement con messaggio generico
+    if ($stmt === false) {
         error_log('Payment Query Prep Error: ' . $conn->error);
-        throw new Exception('Errore nel sistema di pagamento. Riprova più tardi.');
+        throw new Exception('Errore nel sistema di pagamento');
     }
 
     $result = $stmt->execute();
 
-    if (!$result) {
+    if ($result !== true) {
         error_log('Payment Update Error: ' . $stmt->error);
         $stmt->close();
-        throw new Exception('Errore aggiornamento stato prenotazione. Riprova più tardi.');
+        throw new Exception('Errore nel sistema di pagamento');
     }
 
     if ($stmt->affected_rows === 0) {
+        error_log('Payment Update: nessuna riga aggiornata per booking_id ' . substr($bookingId, 0, 20));
         $stmt->close();
-        throw new Exception('Prenotazione non trovata o già aggiornata');
+        // HARDENING: Messaggio generico - non rivelare se prenotazione esiste o è già processata
+        throw new Exception('Errore nel sistema di pagamento');
     }
 
     $stmt->close();
@@ -629,34 +848,28 @@ function validateWebhookSignature($payload, $signature, $secret) {
 }
 
 /**
- * Gestisce webhook da payment provider
- * Da chiamare con endpoint separato o action=webhook
+ * Gestisce webhook da Stripe
  *
- * SICUREZZA: Richiede validazione HMAC-SHA256 obbligatoria.
+ * SICUREZZA: Richiede validazione della firma webhook Stripe obbligatoria.
  * Il webhook viene processato SOLO se la firma crittografica è valida.
+ *
+ * Endpoint: POST /api/payments.php?action=webhook
  */
 function handleWebhook() {
-    global $conn;
+    global $conn, $stripeSecretKey;
 
     // Leggi il payload raw PRIMA di qualsiasi parsing
     $payload = file_get_contents('php://input');
 
-    // Ottieni la firma dall'header (supporta diversi formati comuni)
-    $signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ??
-                 $_SERVER['HTTP_X_SIGNATURE'] ??
-                 $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
+    // Ottieni la firma dall'header Stripe
+    $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
 
-    // Alcuni provider inviano la firma con prefisso (es: "sha256=...")
-    if (strpos($signature, 'sha256=') === 0) {
-        $signature = substr($signature, 7);
-    }
-
-    // Carica il segreto webhook dalla configurazione
-    $webhookSecret = $_ENV['WEBHOOK_SECRET'] ?? getenv('WEBHOOK_SECRET') ?: '';
+    // Carica il webhook secret dalla configurazione
+    $webhookSecret = $_ENV['STRIPE_WEBHOOK_SECRET'] ?? getenv('STRIPE_WEBHOOK_SECRET') ?: '';
 
     // SICUREZZA: Rifiuta webhook se il segreto non è configurato
     if (empty($webhookSecret)) {
-        error_log('Webhook Error: WEBHOOK_SECRET non configurato nel file .env');
+        error_log('Webhook Error: STRIPE_WEBHOOK_SECRET non configurato');
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -666,8 +879,8 @@ function handleWebhook() {
     }
 
     // SICUREZZA: Rifiuta webhook senza firma
-    if (empty($signature)) {
-        error_log('Webhook Error: Firma mancante - possibile tentativo di spoofing da IP: ' . getClientIp());
+    if (empty($sigHeader)) {
+        error_log('Webhook Error: Firma Stripe mancante - IP: ' . getClientIp());
         http_response_code(401);
         echo json_encode([
             'success' => false,
@@ -676,69 +889,93 @@ function handleWebhook() {
         return;
     }
 
-    // SICUREZZA: Valida la firma HMAC-SHA256
-    if (!validateWebhookSignature($payload, $signature, $webhookSecret)) {
-        error_log('Webhook Error: Firma non valida - possibile tentativo di frode da IP: ' . getClientIp());
+    try {
+        // Verifica la firma usando il metodo ufficiale Stripe
+        \Stripe\Stripe::setApiKey($stripeSecretKey);
+        $event = \Stripe\Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
+
+    } catch (\Stripe\Exception\SignatureVerificationException $e) {
+        error_log('Webhook Error: Firma Stripe non valida - ' . $e->getMessage());
         http_response_code(401);
         echo json_encode([
             'success' => false,
             'error' => 'Invalid webhook signature'
         ]);
         return;
-    }
-
-    // La firma è valida - ora possiamo processare il payload
-    $data = json_decode($payload, true);
-
-    if (!$data || empty($data['event'])) {
+    } catch (\UnexpectedValueException $e) {
+        error_log('Webhook Error: Payload non valido - ' . $e->getMessage());
         http_response_code(400);
         echo json_encode([
             'success' => false,
-            'error' => 'Invalid webhook payload'
+            'error' => 'Invalid payload'
         ]);
         return;
     }
 
     // Log dell'evento webhook ricevuto (per audit)
-    error_log('Webhook ricevuto: ' . $data['event'] . ' - booking_id: ' . ($data['booking_id'] ?? 'N/A'));
+    error_log('Stripe Webhook ricevuto: ' . $event->type);
 
     try {
-        switch ($data['event']) {
-            case 'payment.completed':
-                if (!empty($data['booking_id'])) {
+        // Gestisci i diversi tipi di evento Stripe
+        switch ($event->type) {
+            case 'payment_intent.succeeded':
+                $paymentIntent = $event->data->object;
+                $bookingId = $paymentIntent->metadata['booking_id'] ?? '';
+
+                if (!empty($bookingId) && validateBookingId($bookingId)) {
                     updateBookingPaymentStatus(
-                        $data['booking_id'],
+                        $bookingId,
                         'completed',
-                        $data['method'] ?? 'unknown',
-                        $data['transaction_id'] ?? ''
+                        'card',
+                        $paymentIntent->id
                     );
+                    error_log("Webhook: Pagamento completato per booking $bookingId");
                 }
                 break;
 
-            case 'payment.failed':
-                if (!empty($data['booking_id'])) {
+            case 'payment_intent.payment_failed':
+                $paymentIntent = $event->data->object;
+                $bookingId = $paymentIntent->metadata['booking_id'] ?? '';
+
+                if (!empty($bookingId) && validateBookingId($bookingId)) {
                     updateBookingPaymentStatus(
-                        $data['booking_id'],
+                        $bookingId,
                         'failed',
-                        $data['method'] ?? 'unknown',
-                        $data['transaction_id'] ?? ''
+                        'card',
+                        $paymentIntent->id
                     );
+                    error_log("Webhook: Pagamento fallito per booking $bookingId");
                 }
                 break;
 
-            case 'payment.refunded':
-                if (!empty($data['booking_id'])) {
-                    updateBookingPaymentStatus(
-                        $data['booking_id'],
-                        'refunded',
-                        $data['method'] ?? 'unknown',
-                        $data['transaction_id'] ?? ''
-                    );
+            case 'charge.refunded':
+                $charge = $event->data->object;
+                $paymentIntentId = $charge->payment_intent;
+
+                // Trova il booking_id dalla transazione
+                if ($conn !== null && !empty($paymentIntentId)) {
+                    $stmt = $conn->prepare("SELECT booking_id FROM prenotazioni WHERE transaction_id = ?");
+                    $stmt->bind_param("s", $paymentIntentId);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+
+                    if ($result->num_rows > 0) {
+                        $row = $result->fetch_assoc();
+                        updateBookingPaymentStatus(
+                            $row['booking_id'],
+                            'refunded',
+                            'card',
+                            $paymentIntentId
+                        );
+                        error_log("Webhook: Rimborso processato per booking " . $row['booking_id']);
+                    }
+                    $stmt->close();
                 }
                 break;
 
             default:
-                error_log('Webhook: evento non gestito: ' . $data['event']);
+                // Eventi non gestiti - log per debug
+                error_log('Webhook: evento non gestito: ' . $event->type);
         }
 
         http_response_code(200);

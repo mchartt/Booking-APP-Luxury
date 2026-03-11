@@ -706,6 +706,79 @@
     75% { transform: translateX(5px); }
 }
 
+/* ===== STRIPE ELEMENTS STYLES ===== */
+.stripe-secure-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-xl);
+    font-size: 0.9rem;
+    color: #2E7D32;
+    border: 1px solid #a5d6a7;
+}
+
+.stripe-secure-info i {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+/* Container per Stripe Elements iframe */
+.stripe-element {
+    padding: var(--space-md);
+    border: 2px solid var(--color-brown-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-white);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    min-height: 44px;
+}
+
+.stripe-element:focus-within {
+    border-color: var(--color-brown-primary);
+    box-shadow: 0 0 0 3px rgba(139, 111, 71, 0.1);
+}
+
+.stripe-element.StripeElement--invalid {
+    border-color: #f44336;
+}
+
+.stripe-element.StripeElement--complete {
+    border-color: #4CAF50;
+}
+
+/* Carte accettate */
+.accepted-cards {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+    padding: var(--space-sm) 0;
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+}
+
+.accepted-cards i {
+    font-size: 1.8rem;
+    opacity: 0.7;
+    transition: opacity 0.3s;
+}
+
+.accepted-cards i.fa-cc-visa { color: #1a1f71; }
+.accepted-cards i.fa-cc-mastercard { color: #eb001b; }
+.accepted-cards i.fa-cc-amex { color: #006fcf; }
+
+.accepted-cards i:hover {
+    opacity: 1;
+}
+
+/* PayPal Button Container */
+#paypal-button-container {
+    min-height: 55px;
+    margin-top: var(--space-lg);
+}
+
 /* ===== CARD PREVIEW ===== */
 .card-preview {
     background: linear-gradient(135deg, var(--color-brown-primary) 0%, var(--color-brown-hover) 100%);

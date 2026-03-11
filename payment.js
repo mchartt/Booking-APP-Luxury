@@ -1,15 +1,14 @@
 /**
  * Payment Page - Luxury Hotel
- * Gestione sicura dei pagamenti con validazioni robuste
+ * PCI-DSS COMPLIANT: Nessun dato carta passa attraverso il nostro codice.
+ * Utilizza Stripe Elements per la raccolta sicura dei dati.
  */
 
 // ========== CONFIGURAZIONE ==========
 const PAYMENT_CONFIG = {
-    API_URL: '/api/payments.php',
+    API_URL: './api/payments.php',
+    STRIPE_CONFIG_URL: './api/stripe-config.php',
     SESSION_TIMEOUT: 15 * 60 * 1000, // 15 minuti
-    MIN_CARD_LENGTH: 13,
-    MAX_CARD_LENGTH: 19,
-    CVV_LENGTH: { min: 3, max: 4 },
     IBAN: {
         beneficiary: 'Luxury Hotel S.r.l.',
         iban: 'IT60 X054 2811 1010 0000 0123 456',
@@ -23,6 +22,11 @@ let bookingData = null;
 let selectedPaymentMethod = 'card';
 let sessionTimer = null;
 let timeRemaining = PAYMENT_CONFIG.SESSION_TIMEOUT;
+
+// Stripe Elements (inizializzati dopo il caricamento della pagina)
+let stripe = null;
+let cardElement = null;
+let clientSecret = null;
 
 // ========== UTILITY FUNCTIONS ==========
 
@@ -63,12 +67,18 @@ function formatPrice(amount) {
 }
 
 /**
- * Genera token CSRF
+ * Legge il token CSRF dal meta tag (generato dal server)
+ * SICUREZZA: Il token è generato esclusivamente dal backend PHP
+ * e iniettato nel DOM tramite il meta tag. Non generare MAI token lato client.
+ * @returns {string} Il token CSRF o stringa vuota se non trovato
  */
-function generateCSRFToken() {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+function getCSRFToken() {
+    const metaTag = document.querySelector('meta[name="csrf-token"]');
+    if (!metaTag) {
+        console.error('CSRF token meta tag non trovato. Assicurati di usare payment.php');
+        return '';
+    }
+    return metaTag.getAttribute('content') || '';
 }
 
 // ========== VALIDAZIONE DATI PRENOTAZIONE ==========
@@ -79,7 +89,6 @@ function generateCSRFToken() {
 function validateBookingData(data) {
     const errors = [];
 
-    // Campi obbligatori
     const requiredFields = ['booking_id', 'roomType', 'checkIn', 'checkOut', 'name', 'email', 'totalPrice'];
     for (const field of requiredFields) {
         if (!data[field]) {
@@ -87,12 +96,10 @@ function validateBookingData(data) {
         }
     }
 
-    // Validazione booking_id
     if (data.booking_id && !/^BK\d{14}_[a-f0-9]{8}$/i.test(data.booking_id)) {
         errors.push('ID prenotazione non valido');
     }
 
-    // Validazione date
     if (data.checkIn && data.checkOut) {
         const checkIn = new Date(data.checkIn);
         const checkOut = new Date(data.checkOut);
@@ -108,19 +115,16 @@ function validateBookingData(data) {
         }
     }
 
-    // Validazione prezzo
     const price = parseFloat(data.totalPrice);
     if (isNaN(price) || price <= 0 || price > 100000) {
         errors.push('Prezzo non valido');
     }
 
-    // Validazione tipo stanza
     const validRoomTypes = ['Standard', 'Deluxe', 'Suite'];
     if (data.roomType && !validRoomTypes.includes(data.roomType)) {
         errors.push('Tipo stanza non valido');
     }
 
-    // Validazione email
     if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
         errors.push('Email non valida');
     }
@@ -131,256 +135,108 @@ function validateBookingData(data) {
     };
 }
 
-// ========== VALIDAZIONE CARTA ==========
+// ========== STRIPE ELEMENTS INITIALIZATION ==========
 
 /**
- * Algoritmo di Luhn per validare numeri carta
+ * Inizializza Stripe e crea il PaymentIntent sul backend
+ * SICUREZZA: La publishable key è pubblica, il client_secret viene dal backend
+ * ZERO-TRUST: Non inviamo amount - il backend lo recupera dal DB
  */
-function luhnCheck(cardNumber) {
-    const digits = cardNumber.replace(/\D/g, '');
-    if (digits.length < PAYMENT_CONFIG.MIN_CARD_LENGTH) return false;
-
-    let sum = 0;
-    let isEven = false;
-
-    for (let i = digits.length - 1; i >= 0; i--) {
-        let digit = parseInt(digits[i], 10);
-
-        if (isEven) {
-            digit *= 2;
-            if (digit > 9) digit -= 9;
-        }
-
-        sum += digit;
-        isEven = !isEven;
-    }
-
-    return sum % 10 === 0;
-}
-
-/**
- * Rileva brand carta
- */
-function detectCardBrand(cardNumber) {
-    const number = cardNumber.replace(/\D/g, '');
-
-    const patterns = {
-        visa: /^4/,
-        mastercard: /^5[1-5]|^2[2-7]/,
-        amex: /^3[47]/,
-        discover: /^6(?:011|5)/
-    };
-
-    for (const [brand, pattern] of Object.entries(patterns)) {
-        if (pattern.test(number)) return brand;
-    }
-
-    return null;
-}
-
-/**
- * Valida data scadenza
- */
-function validateExpiry(expiry) {
-    const match = expiry.match(/^(\d{2})\/(\d{2})$/);
-    if (!match) return { valid: false, error: 'Formato non valido (MM/AA)' };
-
-    const month = parseInt(match[1], 10);
-    const year = parseInt('20' + match[2], 10);
-
-    if (month < 1 || month > 12) {
-        return { valid: false, error: 'Mese non valido' };
-    }
-
-    const now = new Date();
-    const expDate = new Date(year, month, 0); // Ultimo giorno del mese
-
-    if (expDate < now) {
-        return { valid: false, error: 'Carta scaduta' };
-    }
-
-    return { valid: true };
-}
-
-/**
- * Valida CVV
- */
-function validateCVV(cvv, cardBrand) {
-    const length = cvv.length;
-    const expectedLength = cardBrand === 'amex' ? 4 : 3;
-
-    if (!/^\d+$/.test(cvv)) {
-        return { valid: false, error: 'Solo numeri' };
-    }
-
-    if (length !== expectedLength) {
-        return { valid: false, error: `Deve essere ${expectedLength} cifre` };
-    }
-
-    return { valid: true };
-}
-
-// ========== FORMATTAZIONE INPUT ==========
-
-/**
- * Formatta numero carta con spazi
- */
-function formatCardNumber(input) {
-    let value = input.value.replace(/\D/g, '');
-    const brand = detectCardBrand(value);
-
-    // Limita lunghezza
-    const maxLength = brand === 'amex' ? 15 : 16;
-    value = value.substring(0, maxLength);
-
-    // Formatta con spazi
-    if (brand === 'amex') {
-        // AMEX: 4-6-5
-        value = value.replace(/(\d{4})(\d{0,6})(\d{0,5})/, (_, a, b, c) => {
-            return [a, b, c].filter(Boolean).join(' ');
+async function initializeStripe() {
+    try {
+        // 1. Ottieni la configurazione Stripe dal backend
+        // NOTA: L'importo viene recuperato dal DB usando booking_id (Zero-Trust)
+        const response = await fetch(PAYMENT_CONFIG.STRIPE_CONFIG_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                booking_id: bookingData.booking_id,
+                currency: 'eur',
+                description: `Prenotazione ${bookingData.roomType} - ${bookingData.booking_id}`,
+                customer_email: bookingData.email
+            })
         });
-    } else {
-        // Altre: 4-4-4-4
-        value = value.match(/.{1,4}/g)?.join(' ') || value;
-    }
 
-    input.value = value;
-    updateCardIcons(brand);
-    updateCardPreview();
-}
-
-/**
- * Formatta scadenza MM/AA
- */
-function formatExpiry(input) {
-    let value = input.value.replace(/\D/g, '');
-
-    if (value.length >= 2) {
-        const month = parseInt(value.substring(0, 2), 10);
-        if (month > 12) value = '12' + value.substring(2);
-        if (month === 0) value = '01' + value.substring(2);
-        value = value.substring(0, 2) + '/' + value.substring(2, 4);
-    }
-
-    input.value = value;
-    updateCardPreview();
-}
-
-/**
- * Formatta CVV (solo numeri)
- */
-function formatCVV(input) {
-    const brand = detectCardBrand(document.getElementById('cardNumber')?.value || '');
-    const maxLength = brand === 'amex' ? 4 : 3;
-    input.value = input.value.replace(/\D/g, '').substring(0, maxLength);
-}
-
-/**
- * Formatta nome carta (uppercase)
- */
-function formatCardName(input) {
-    input.value = input.value.toUpperCase().replace(/[^A-Z\s]/g, '');
-    updateCardPreview();
-}
-
-// ========== UI UPDATES ==========
-
-/**
- * Aggiorna icone carte
- */
-function updateCardIcons(activeBrand) {
-    const icons = document.querySelectorAll('.card-icons i');
-    icons.forEach(icon => {
-        icon.classList.remove('active');
-        const brandClass = icon.className.match(/fa-cc-(\w+)/)?.[1];
-        if (brandClass === activeBrand) {
-            icon.classList.add('active');
+        if (!response.ok) {
+            throw new Error('Errore nella configurazione del pagamento');
         }
-    });
-}
 
-/**
- * Aggiorna preview carta
- */
-function updateCardPreview() {
-    const cardNumberEl = document.getElementById('cardNumber');
-    const cardNameEl = document.getElementById('cardName');
-    const cardExpiryEl = document.getElementById('cardExpiry');
+        const config = await response.json();
 
-    const displayNumber = document.querySelector('.card-number-display');
-    const displayName = document.querySelector('.card-info .card-holder strong');
-    const displayExpiry = document.querySelector('.card-info .card-expiry strong');
-    const brandIcon = document.querySelector('.card-brand');
+        if (!config.success) {
+            throw new Error(config.message || 'Configurazione Stripe fallita');
+        }
 
-    if (displayNumber && cardNumberEl) {
-        const num = cardNumberEl.value || '**** **** **** ****';
-        displayNumber.textContent = num.padEnd(19, '*').replace(/\*{4}/g, m => m + ' ').trim();
+        // 2. Inizializza Stripe con la publishable key
+        stripe = Stripe(config.publishable_key);
+        clientSecret = config.client_secret;
+
+        // 3. Crea e monta il Card Element
+        const elements = stripe.elements({
+            clientSecret: clientSecret,
+            appearance: {
+                theme: 'stripe',
+                variables: {
+                    colorPrimary: '#8B6F47',
+                    colorBackground: '#FDFBF7',
+                    colorText: '#2D2A24',
+                    colorDanger: '#e63946',
+                    fontFamily: 'Lora, serif',
+                    borderRadius: '8px',
+                    spacingUnit: '4px'
+                },
+                rules: {
+                    '.Input': {
+                        border: '1px solid #C9B99A',
+                        boxShadow: 'none',
+                        padding: '12px 16px'
+                    },
+                    '.Input:focus': {
+                        border: '2px solid #8B6F47',
+                        boxShadow: '0 0 0 3px rgba(139, 111, 71, 0.1)'
+                    },
+                    '.Label': {
+                        fontWeight: '500',
+                        marginBottom: '8px'
+                    }
+                }
+            },
+            locale: 'it'
+        });
+
+        // 4. Monta il Payment Element (include carta, Apple Pay, Google Pay, etc.)
+        cardElement = elements.create('payment', {
+            layout: 'tabs'
+        });
+        cardElement.mount('#card-element');
+
+        // 5. Gestisci errori di validazione in tempo reale
+        cardElement.on('change', function(event) {
+            const errorElement = document.getElementById('card-errors');
+            if (event.error) {
+                errorElement.textContent = event.error.message;
+                errorElement.classList.add('show');
+            } else {
+                errorElement.textContent = '';
+                errorElement.classList.remove('show');
+            }
+        });
+
+        console.log('Stripe Elements inizializzato con successo');
+
+    } catch (error) {
+        console.error('Errore inizializzazione Stripe:', error);
+        showNotification('Errore nel caricamento del sistema di pagamento. Ricarica la pagina.', 'error');
+
+        // Disabilita l'opzione carta se Stripe non è disponibile
+        const cardBtn = document.querySelector('[data-method="card"]');
+        if (cardBtn) {
+            cardBtn.disabled = true;
+            cardBtn.title = 'Pagamento con carta non disponibile';
+        }
     }
-
-    if (displayName && cardNameEl) {
-        displayName.textContent = cardNameEl.value || 'NOME COGNOME';
-    }
-
-    if (displayExpiry && cardExpiryEl) {
-        displayExpiry.textContent = cardExpiryEl.value || 'MM/AA';
-    }
-
-    if (brandIcon && cardNumberEl) {
-        const brand = detectCardBrand(cardNumberEl.value);
-        const iconMap = {
-            visa: 'fab fa-cc-visa',
-            mastercard: 'fab fa-cc-mastercard',
-            amex: 'fab fa-cc-amex',
-            discover: 'fab fa-cc-discover'
-        };
-        brandIcon.className = 'card-brand ' + (iconMap[brand] || 'fas fa-credit-card');
-    }
-}
-
-/**
- * Mostra errore su input
- */
-function showInputError(inputId, message) {
-    const input = document.getElementById(inputId);
-    const errorEl = document.getElementById(`${inputId}Error`);
-
-    if (input) {
-        input.classList.add('error');
-        input.classList.remove('valid');
-    }
-
-    if (errorEl) {
-        errorEl.textContent = message;
-        errorEl.classList.add('show');
-    }
-}
-
-/**
- * Rimuovi errore da input
- */
-function clearInputError(inputId) {
-    const input = document.getElementById(inputId);
-    const errorEl = document.getElementById(`${inputId}Error`);
-
-    if (input) {
-        input.classList.remove('error');
-    }
-
-    if (errorEl) {
-        errorEl.classList.remove('show');
-    }
-}
-
-/**
- * Marca input come valido
- */
-function markInputValid(inputId) {
-    const input = document.getElementById(inputId);
-    if (input) {
-        input.classList.remove('error');
-        input.classList.add('valid');
-    }
-    clearInputError(inputId);
 }
 
 // ========== GESTIONE METODI PAGAMENTO ==========
@@ -405,14 +261,6 @@ function switchPaymentMethod(method) {
     if (activeContent) {
         activeContent.style.display = 'block';
     }
-
-    // Aggiorna required sui campi carta
-    const cardInputs = document.querySelectorAll('#cardPayment input');
-    cardInputs.forEach(input => {
-        if (input.hasAttribute('data-required')) {
-            input.required = method === 'card';
-        }
-    });
 
     // Aggiorna testo pulsante
     updatePayButtonText();
@@ -462,7 +310,6 @@ function startSessionTimer() {
         const seconds = Math.floor((timeRemaining % 60000) / 1000);
         timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-        // Warning quando rimane poco tempo
         const timerContainer = document.querySelector('.payment-timer');
         if (timeRemaining <= 60000 && timerContainer) {
             timerContainer.classList.add('expired');
@@ -509,7 +356,6 @@ async function copyToClipboard(text, button) {
  * Popola riepilogo prenotazione
  */
 function populateSummary() {
-    // Recupera dati da sessionStorage
     const rawData = sessionStorage.getItem('pendingBooking');
 
     if (!rawData) {
@@ -527,7 +373,6 @@ function populateSummary() {
         return false;
     }
 
-    // Valida dati
     const validation = validateBookingData(bookingData);
     if (!validation.valid) {
         console.error('Errori validazione:', validation.errors);
@@ -548,7 +393,7 @@ function populateSummary() {
     setElementText('summaryTotal', formatPrice(bookingData.totalPrice));
     setElementText('btnAmount', formatPrice(bookingData.totalPrice));
 
-    // Popola IBAN con dati hotel
+    // Popola IBAN
     setElementText('ibanBeneficiary', PAYMENT_CONFIG.IBAN.beneficiary);
     setElementText('ibanNumber', PAYMENT_CONFIG.IBAN.iban);
     setElementText('ibanBIC', PAYMENT_CONFIG.IBAN.bic);
@@ -568,56 +413,8 @@ function setElementText(id, text) {
 // ========== GESTIONE FORM ==========
 
 /**
- * Valida form carta
- */
-function validateCardForm() {
-    let isValid = true;
-
-    // Nome carta
-    const cardName = document.getElementById('cardName').value.trim();
-    if (!cardName || cardName.length < 3) {
-        showInputError('cardName', 'Inserisci il nome dell\'intestatario');
-        isValid = false;
-    } else {
-        markInputValid('cardName');
-    }
-
-    // Numero carta
-    const cardNumber = document.getElementById('cardNumber').value;
-    const cardDigits = cardNumber.replace(/\D/g, '');
-    if (!luhnCheck(cardDigits)) {
-        showInputError('cardNumber', 'Numero carta non valido');
-        isValid = false;
-    } else {
-        markInputValid('cardNumber');
-    }
-
-    // Scadenza
-    const expiry = document.getElementById('cardExpiry').value;
-    const expiryValidation = validateExpiry(expiry);
-    if (!expiryValidation.valid) {
-        showInputError('cardExpiry', expiryValidation.error);
-        isValid = false;
-    } else {
-        markInputValid('cardExpiry');
-    }
-
-    // CVV
-    const cvv = document.getElementById('cardCvv').value;
-    const brand = detectCardBrand(cardNumber);
-    const cvvValidation = validateCVV(cvv, brand);
-    if (!cvvValidation.valid) {
-        showInputError('cardCvv', cvvValidation.error);
-        isValid = false;
-    } else {
-        markInputValid('cardCvv');
-    }
-
-    return isValid;
-}
-
-/**
  * Gestisce submit form
+ * SICUREZZA: Per carta, usa Stripe confirmPayment - nessun dato carta nel nostro codice
  */
 async function handleFormSubmit(e) {
     e.preventDefault();
@@ -628,77 +425,116 @@ async function handleFormSubmit(e) {
         return;
     }
 
-    // Validazione specifica per metodo
-    if (selectedPaymentMethod === 'card' && !validateCardForm()) {
-        showNotification('Correggi gli errori nei dati della carta', 'error');
-        return;
-    }
-
-    // Mostra loading
     showLoading(true);
 
     try {
-        if (selectedPaymentMethod === 'iban') {
-            // Per IBAN, conferma solo la prenotazione
-            await processIBANPayment();
-        } else {
-            // Per carta e PayPal, processa pagamento
-            await processPayment();
+        switch (selectedPaymentMethod) {
+            case 'card':
+                await processStripePayment();
+                break;
+            case 'paypal':
+                showNotification('Utilizza il pulsante PayPal per procedere', 'warning');
+                showLoading(false);
+                break;
+            case 'iban':
+                await processIBANPayment();
+                break;
         }
     } catch (error) {
         console.error('Errore pagamento:', error);
-        showNotification('Errore durante il pagamento. Riprova.', 'error');
+        showNotification(error.message || 'Errore durante il pagamento. Riprova.', 'error');
     } finally {
         showLoading(false);
     }
 }
 
 /**
- * Processa pagamento carta/PayPal
+ * Processa pagamento con Stripe
+ * SICUREZZA PCI-DSS: I dati carta sono gestiti interamente da Stripe
+ * Il nostro server riceve solo il payment_intent_id dopo la conferma
  */
-async function processPayment() {
-    const csrfToken = generateCSRFToken();
-
-    const paymentData = {
-        booking_id: bookingData.booking_id,
-        amount: parseFloat(bookingData.totalPrice),
-        method: selectedPaymentMethod,
-        csrf_token: csrfToken
-    };
-
-    // Aggiungi dati carta se necessario (in produzione, usare tokenizzazione!)
-    if (selectedPaymentMethod === 'card') {
-        paymentData.card_last_four = document.getElementById('cardNumber').value.replace(/\D/g, '').slice(-4);
-        paymentData.card_brand = detectCardBrand(document.getElementById('cardNumber').value);
+async function processStripePayment() {
+    if (!stripe || !cardElement || !clientSecret) {
+        throw new Error('Sistema di pagamento non inizializzato. Ricarica la pagina.');
     }
 
-    // Simula chiamata API
+    // Stripe gestisce tutti i dati carta nel loro iframe sicuro
+    // Noi riceviamo solo il risultato (successo/errore)
+    const { error, paymentIntent } = await stripe.confirmPayment({
+        elements: cardElement._elements, // L'elements object
+        confirmParams: {
+            return_url: window.location.origin + '/payment-success.html',
+            receipt_email: bookingData.email,
+            payment_method_data: {
+                billing_details: {
+                    name: bookingData.name,
+                    email: bookingData.email
+                }
+            }
+        },
+        redirect: 'if_required' // Non redireziona se non necessario (es. no 3DS)
+    });
+
+    if (error) {
+        // Mostra errore all'utente (errore Stripe, non dati carta)
+        const errorElement = document.getElementById('card-errors');
+        if (errorElement) {
+            errorElement.textContent = error.message;
+            errorElement.classList.add('show');
+        }
+        throw new Error(error.message);
+    }
+
+    // Pagamento completato con successo
+    if (paymentIntent && paymentIntent.status === 'succeeded') {
+        // Notifica il backend del pagamento completato (solo ID, nessun dato carta)
+        await notifyBackendPaymentComplete(paymentIntent.id);
+        showSuccessModal();
+    } else if (paymentIntent && paymentIntent.status === 'requires_action') {
+        // 3D Secure o altra azione richiesta - Stripe gestisce automaticamente
+        showNotification('Azione aggiuntiva richiesta. Segui le istruzioni.', 'warning');
+    }
+}
+
+/**
+ * Notifica il backend del completamento pagamento
+ * SICUREZZA: Invia solo payment_intent_id, MAI dati carta
+ */
+async function notifyBackendPaymentComplete(paymentIntentId) {
+    const csrfToken = getCSRFToken();
+
     const response = await fetch(PAYMENT_CONFIG.API_URL, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRF-Token': csrfToken
         },
-        body: JSON.stringify(paymentData)
+        body: JSON.stringify({
+            action: 'confirm_stripe_payment',
+            booking_id: bookingData.booking_id,
+            payment_intent_id: paymentIntentId,
+            method: 'card',
+            csrf_token: csrfToken
+        })
     });
 
-    // Per demo, simula successo anche se API non esiste
-    await simulatePaymentDelay();
-
-    showSuccessModal();
+    if (!response.ok) {
+        console.error('Errore notifica backend:', await response.text());
+        // Il pagamento Stripe è comunque andato a buon fine
+        // Il backend sincronizzerà via webhook
+    }
 }
 
 /**
  * Processa conferma IBAN
+ * SICUREZZA: Non inviamo amount - il backend lo recupera dal DB (Zero-Trust)
  */
 async function processIBANPayment() {
-    const csrfToken = generateCSRFToken();
+    const csrfToken = getCSRFToken();
 
     const paymentData = {
         booking_id: bookingData.booking_id,
-        amount: parseFloat(bookingData.totalPrice),
         method: 'iban',
-        status: 'pending_transfer',
         csrf_token: csrfToken
     };
 
@@ -711,16 +547,7 @@ async function processIBANPayment() {
         body: JSON.stringify(paymentData)
     }).catch(() => {});
 
-    await simulatePaymentDelay();
-
     showSuccessModal(true);
-}
-
-/**
- * Simula delay pagamento per demo
- */
-function simulatePaymentDelay() {
-    return new Promise(resolve => setTimeout(resolve, 2000));
 }
 
 /**
@@ -733,7 +560,6 @@ function showSuccessModal(isIBAN = false) {
     setElementText('confirmAmount', formatPrice(bookingData.totalPrice));
     setElementText('confirmEmail', bookingData.email);
 
-    // Personalizza messaggio per IBAN
     const messageEl = modal.querySelector('p:not(.email-notice)');
     if (messageEl) {
         if (isIBAN) {
@@ -791,56 +617,20 @@ function showNotification(message, type = 'info') {
 
 // ========== INIZIALIZZAZIONE ==========
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Popola riepilogo
     if (!populateSummary()) return;
 
     // Avvia timer
     startSessionTimer();
 
+    // Inizializza Stripe Elements (per pagamento carta)
+    await initializeStripe();
+
     // Event listeners metodi pagamento
     document.querySelectorAll('.method-btn').forEach(btn => {
         btn.addEventListener('click', () => switchPaymentMethod(btn.dataset.method));
     });
-
-    // Event listeners formattazione input
-    const cardNumber = document.getElementById('cardNumber');
-    const cardExpiry = document.getElementById('cardExpiry');
-    const cardCvv = document.getElementById('cardCvv');
-    const cardName = document.getElementById('cardName');
-
-    if (cardNumber) {
-        cardNumber.addEventListener('input', () => formatCardNumber(cardNumber));
-        cardNumber.addEventListener('blur', () => {
-            if (cardNumber.value && !luhnCheck(cardNumber.value.replace(/\D/g, ''))) {
-                showInputError('cardNumber', 'Numero carta non valido');
-            } else if (cardNumber.value) {
-                markInputValid('cardNumber');
-            }
-        });
-    }
-
-    if (cardExpiry) {
-        cardExpiry.addEventListener('input', () => formatExpiry(cardExpiry));
-        cardExpiry.addEventListener('blur', () => {
-            if (cardExpiry.value) {
-                const validation = validateExpiry(cardExpiry.value);
-                if (!validation.valid) {
-                    showInputError('cardExpiry', validation.error);
-                } else {
-                    markInputValid('cardExpiry');
-                }
-            }
-        });
-    }
-
-    if (cardCvv) {
-        cardCvv.addEventListener('input', () => formatCVV(cardCvv));
-    }
-
-    if (cardName) {
-        cardName.addEventListener('input', () => formatCardName(cardName));
-    }
 
     // Form submit
     const form = document.getElementById('paymentForm');
@@ -864,6 +654,4 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('popstate', function() {
         window.history.pushState(null, '', window.location.href);
     });
-
-    // Sistema di pagamento inizializzato
 });

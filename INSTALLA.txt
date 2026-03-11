@@ -1,48 +1,417 @@
-============================================
-    LUXURY HOTEL - GUIDA RAPIDA
-============================================
+================================================================================
+                    LUXURY HOTEL - GUIDA INSTALLAZIONE
+                         Per Principianti Assoluti
+================================================================================
 
-PASSO 1: Installa XAMPP
------------------------
-Scarica da: https://www.apachefriends.org/download.html
-Installa e apri il pannello di controllo.
+Questa guida ti accompagna passo-passo nell'installazione del sistema.
+Tempo stimato: 10-15 minuti (la prima volta).
 
+================================================================================
+                              INDICE
+================================================================================
 
-PASSO 2: Avvia i servizi
-------------------------
-Nel pannello XAMPP clicca "Start" su:
-  - Apache (deve diventare verde)
-  - MySQL (deve diventare verde)
+  1. Cosa ti serve
+  2. Installazione XAMPP
+  3. Copia dei file
+  4. Configurazione
+  5. Avvio dell'installazione
+  6. Primo accesso
+  7. Test del sistema
+  8. Problemi comuni
 
+================================================================================
+                         1. COSA TI SERVE
+================================================================================
 
-PASSO 3: Copia i file
----------------------
-Copia TUTTA questa cartella dentro:
-  C:\xampp\htdocs\
+Per far funzionare questo sistema sul tuo computer ti serve:
 
-Avrai quindi:
-  C:\xampp\htdocs\Booking-APP-Luxury\
+  [X] Un computer con Windows 10/11 (o Mac/Linux)
+  [X] Connessione internet (per scaricare XAMPP)
+  [X] 500MB di spazio libero su disco
+  [X] 10-15 minuti di tempo
 
+NON ti serve:
+  - Saper programmare
+  - Conoscere PHP o MySQL
+  - Avere esperienza con i server
 
-PASSO 4: Installa il sistema
+================================================================================
+                       2. INSTALLAZIONE XAMPP
+================================================================================
+
+XAMPP e un programma GRATUITO che installa tutto cio che serve:
+  - Apache (il server web)
+  - MySQL (il database)
+  - PHP (il linguaggio di programmazione)
+
+PASSO 2.1: Scarica XAMPP
+-------------------------
+  1. Apri il browser (Chrome, Firefox, Edge)
+  2. Vai su: https://www.apachefriends.org/download.html
+  3. Clicca sul bottone verde "Download" per Windows
+  4. Aspetta che il download finisca (circa 150MB)
+
+PASSO 2.2: Installa XAMPP
+-------------------------
+  1. Apri il file scaricato (xampp-windows-x64-***.exe)
+
+  2. Se Windows chiede "Vuoi consentire a questa app di apportare
+     modifiche al dispositivo?" clicca "Si"
+
+  3. Clicca "Next" (Avanti) su ogni schermata:
+
+     Schermata 1: "Setup" -> Clicca Next
+     Schermata 2: "Select Components" -> Lascia tutto selezionato, clicca Next
+     Schermata 3: "Installation folder" -> Lascia C:\xampp, clicca Next
+     Schermata 4: "Bitnami" -> Deseleziona la casella, clicca Next
+     Schermata 5: "Ready to Install" -> Clicca Next
+
+  4. Aspetta che l'installazione finisca (1-2 minuti)
+
+  5. Alla fine, clicca "Finish"
+
+PASSO 2.3: Avvia XAMPP
+----------------------
+  1. Dal menu Start di Windows, cerca "XAMPP Control Panel"
+  2. Aprilo
+
+  3. Vedrai una finestra come questa:
+
+     +----------------------------------------------------------+
+     |  XAMPP Control Panel                                      |
+     +----------------------------------------------------------+
+     |  Module     | PID    | Port   | Actions                   |
+     +----------------------------------------------------------+
+     |  Apache     |        |        | [ Start ] [ Admin ]       |
+     |  MySQL      |        |        | [ Start ] [ Admin ]       |
+     |  FileZilla  |        |        | [ Start ] [ Admin ]       |
+     |  Mercury    |        |        | [ Start ] [ Admin ]       |
+     |  Tomcat     |        |        | [ Start ] [ Admin ]       |
+     +----------------------------------------------------------+
+
+  4. Clicca il bottone "Start" accanto ad "Apache"
+  5. Clicca il bottone "Start" accanto a "MySQL"
+
+  6. Se tutto funziona, vedrai i nomi diventare VERDI:
+
+     +----------------------------------------------------------+
+     |  Module     | PID    | Port   | Actions                   |
+     +----------------------------------------------------------+
+     |  Apache     | 1234   | 80,443 | [ Stop  ] [ Admin ]       |  <- VERDE!
+     |  MySQL      | 5678   | 3306   | [ Stop  ] [ Admin ]       |  <- VERDE!
+     +----------------------------------------------------------+
+
+  PROBLEMA? Se non diventano verdi, vai alla sezione "8. Problemi comuni"
+
+================================================================================
+                         3. COPIA DEI FILE
+================================================================================
+
+Ora devi copiare i file del progetto nella cartella giusta.
+
+PASSO 3.1: Trova la cartella htdocs
+-----------------------------------
+  1. Apri "Esplora File" (l'icona della cartella gialla)
+  2. Vai su: C:\xampp\htdocs
+
+     Questo e il percorso:
+     Computer > Disco C: > xampp > htdocs
+
+PASSO 3.2: Copia il progetto
 ----------------------------
-Apri il browser e vai su:
-  http://localhost/Booking-APP-Luxury/install.php
+  1. Prendi TUTTA la cartella "Booking-APP-Luxury"
+     (quella che contiene questo file INSTALLA.txt)
 
-Segui la procedura guidata (ci vogliono 2 minuti).
+  2. Copiala dentro C:\xampp\htdocs
 
+  3. Risultato finale - devi avere questa struttura:
 
-PASSO 5: Usa il sito!
----------------------
-- Sito pubblico: http://localhost/Booking-APP-Luxury/
-- Admin: http://localhost/Booking-APP-Luxury/login.html
+     C:\
+     └── xampp\
+         └── htdocs\
+             └── Booking-APP-Luxury\      <- La cartella del progetto
+                 ├── index.html
+                 ├── admin.html
+                 ├── login.html
+                 ├── config.php
+                 ├── install.php
+                 ├── .env.example
+                 ├── INSTALLA.txt         <- Questo file!
+                 └── api\
+                     ├── bookings.php
+                     └── ...
 
+================================================================================
+                        4. CONFIGURAZIONE
+================================================================================
 
-============================================
-    FATTO!
-============================================
+PASSO 4.1: Crea il file di configurazione
+-----------------------------------------
+  1. Vai nella cartella C:\xampp\htdocs\Booking-APP-Luxury
 
-Problemi? Controlla che:
-1. Apache e MySQL siano verdi in XAMPP
-2. I file siano in C:\xampp\htdocs\Booking-APP-Luxury\
-3. Il firewall non blocchi le porte 80 e 3306
+  2. Trova il file chiamato ".env.example"
+
+     NOTA: Se non vedi il file, devi abilitare i file nascosti:
+     - In Esplora File, clicca su "Visualizza" in alto
+     - Seleziona "Elementi nascosti"
+
+  3. Fai COPIA del file .env.example
+
+  4. Rinomina la copia in ".env" (senza .example)
+
+     Risultato:
+     - .env.example  (il file originale - NON toccarlo)
+     - .env          (la tua copia - questo useremo)
+
+PASSO 4.2: Modifica la configurazione
+-------------------------------------
+  1. Apri il file ".env" con Blocco Note
+     (click destro > Apri con > Blocco Note)
+
+  2. Trova queste righe e modificale cosi:
+
+     DB_HOST=localhost
+     DB_USER=root
+     DB_PASS=
+     DB_NAME=luxury_hotel
+     DEBUG=true
+
+  3. Salva il file (Ctrl+S) e chiudi Blocco Note
+
+  SPIEGAZIONE:
+  - DB_HOST=localhost    -> Il database e sul tuo computer
+  - DB_USER=root         -> Utente predefinito di XAMPP
+  - DB_PASS=             -> Password vuota (normale su XAMPP)
+  - DB_NAME=luxury_hotel -> Nome del database che verra creato
+  - DEBUG=true           -> Mostra errori dettagliati (utile all'inizio)
+
+================================================================================
+                    5. AVVIO DELL'INSTALLAZIONE
+================================================================================
+
+PASSO 5.1: Apri l'installer
+---------------------------
+  1. Assicurati che XAMPP sia avviato (Apache e MySQL VERDI)
+
+  2. Apri il browser (Chrome, Firefox, Edge)
+
+  3. Nella barra degli indirizzi scrivi:
+
+     http://localhost/Booking-APP-Luxury/install.php
+
+  4. Premi INVIO
+
+PASSO 5.2: Segui la procedura guidata
+-------------------------------------
+  L'installer ti guidera attraverso questi passaggi:
+
+  1. VERIFICA REQUISITI
+     - Controlla che PHP e MySQL funzionino
+     - Se tutto e OK vedrai segni di spunta verdi
+
+  2. CREAZIONE DATABASE
+     - Crea automaticamente il database "luxury_hotel"
+     - Crea tutte le tabelle necessarie
+
+  3. CREAZIONE ADMIN
+     - Ti chiede di creare il primo utente amministratore
+     - Inserisci:
+       * Username (es: admin)
+       * Email (la tua email vera)
+       * Password (minimo 8 caratteri, con numeri e lettere)
+
+  4. COMPLETATO!
+     - Se tutto e andato bene, vedrai "Installazione completata!"
+     - Clicca il link per andare al sito
+
+================================================================================
+                          6. PRIMO ACCESSO
+================================================================================
+
+ACCESSO AL SITO PUBBLICO (per i clienti)
+----------------------------------------
+  Indirizzo: http://localhost/Booking-APP-Luxury/
+
+  Qui i clienti possono:
+  - Vedere le camere disponibili
+  - Fare prenotazioni
+  - Pagare online
+
+ACCESSO AL PANNELLO ADMIN (per te)
+----------------------------------
+  Indirizzo: http://localhost/Booking-APP-Luxury/login.html
+
+  1. Inserisci l'email e password che hai creato nell'installer
+  2. Clicca "Accedi"
+
+  Nel pannello admin puoi:
+  - Vedere tutte le prenotazioni
+  - Confermare o cancellare prenotazioni
+  - Vedere le statistiche
+  - Gestire altri amministratori
+
+================================================================================
+                        7. TEST DEL SISTEMA
+================================================================================
+
+Fai questi test per verificare che tutto funzioni:
+
+TEST 1: Homepage
+----------------
+  1. Vai su http://localhost/Booking-APP-Luxury/
+  2. Dovresti vedere la pagina dell'hotel con le camere
+  3. Le immagini si devono vedere
+  4. Scorrendo la pagina, le sezioni devono apparire con animazione
+
+TEST 2: Prenotazione
+--------------------
+  1. Nella homepage, clicca "Prenota Ora" su una camera
+  2. Compila il form:
+     - Check-in: una data futura (es: domani)
+     - Check-out: 2-3 giorni dopo il check-in
+     - Ospiti: 2
+     - Nome: Mario Rossi
+     - Email: mario@test.com
+     - Telefono: 0123456789
+  3. Clicca "Conferma Prenotazione"
+  4. Dovresti vedere un messaggio di successo
+
+TEST 3: Pannello Admin
+----------------------
+  1. Vai su http://localhost/Booking-APP-Luxury/login.html
+  2. Accedi con le tue credenziali
+  3. Dovresti vedere la prenotazione di test nella lista
+
+Se tutti i test funzionano, il sistema e pronto!
+
+================================================================================
+                       8. PROBLEMI COMUNI
+================================================================================
+
+PROBLEMA: Apache non si avvia (rimane rosso)
+--------------------------------------------
+  CAUSA: La porta 80 e gia usata da un altro programma
+
+  SOLUZIONE 1: Chiudi Skype
+    - Skype usa la porta 80
+    - Chiudi Skype completamente (anche dalla system tray)
+    - Riprova ad avviare Apache
+
+  SOLUZIONE 2: Cambia la porta di Apache
+    - Nel pannello XAMPP, clicca "Config" accanto ad Apache
+    - Seleziona "Apache (httpd.conf)"
+    - Trova la riga "Listen 80"
+    - Cambiala in "Listen 8080"
+    - Salva e riavvia Apache
+    - NOTA: Ora userai http://localhost:8080/Booking-APP-Luxury/
+
+PROBLEMA: MySQL non si avvia (rimane rosso)
+-------------------------------------------
+  CAUSA: La porta 3306 e gia usata
+
+  SOLUZIONE:
+    - Apri "Gestione attivita" (Ctrl+Shift+Esc)
+    - Cerca processi chiamati "mysql" o "mysqld"
+    - Chiudili (click destro > Termina attivita)
+    - Riprova ad avviare MySQL in XAMPP
+
+PROBLEMA: Pagina bianca o Errore 500
+------------------------------------
+  CAUSA: Errore nella configurazione
+
+  SOLUZIONE:
+    1. Verifica che il file .env esista
+    2. Verifica che le credenziali siano corrette:
+       DB_USER=root
+       DB_PASS=
+    3. Guarda il file di log:
+       C:\xampp\apache\logs\error.log
+
+PROBLEMA: "Connessione al database fallita"
+-------------------------------------------
+  CAUSA: MySQL non e avviato o credenziali errate
+
+  SOLUZIONE:
+    1. Verifica che MySQL sia VERDE in XAMPP
+    2. Apri http://localhost/phpmyadmin
+       - Se non si apre, MySQL non funziona
+    3. Verifica le credenziali nel file .env
+
+PROBLEMA: Non vedo il file .env.example
+---------------------------------------
+  CAUSA: I file nascosti sono disabilitati
+
+  SOLUZIONE:
+    1. In Esplora File, clicca "Visualizza" in alto
+    2. Seleziona "Elementi nascosti"
+    3. Ora dovresti vedere i file che iniziano con "."
+
+PROBLEMA: "Access denied" nel login admin
+-----------------------------------------
+  CAUSA: Troppi tentativi falliti o utente non approvato
+
+  SOLUZIONE 1: Aspetta 15 minuti (rate limiting)
+
+  SOLUZIONE 2: Svuota la tabella login_attempts
+    1. Apri http://localhost/phpmyadmin
+    2. Seleziona il database "luxury_hotel"
+    3. Clicca sulla tabella "login_attempts"
+    4. Clicca "Svuota" o "Truncate"
+
+  SOLUZIONE 3: Verifica lo stato dell'utente
+    1. In phpMyAdmin, vai alla tabella "admin_users"
+    2. Verifica che la colonna "status" sia "active"
+    3. Se e "pending", cambiala in "active"
+
+================================================================================
+                      COMANDI UTILI
+================================================================================
+
+Creare un nuovo admin da terminale:
+-----------------------------------
+  1. Apri il Prompt dei comandi (cmd)
+  2. Scrivi:
+     cd C:\xampp\htdocs\Booking-APP-Luxury
+     php create_superadmin.php
+  3. Segui le istruzioni
+
+Vedere i log degli errori:
+--------------------------
+  - Apache: C:\xampp\apache\logs\error.log
+  - PHP: C:\xampp\php\logs\php_error_log
+
+Backup del database:
+--------------------
+  1. Apri http://localhost/phpmyadmin
+  2. Seleziona "luxury_hotel"
+  3. Clicca "Esporta"
+  4. Clicca "Esegui"
+  5. Salva il file .sql
+
+================================================================================
+                          CONTATTI
+================================================================================
+
+Se hai ancora problemi dopo aver provato tutte le soluzioni:
+
+  1. Controlla i file di log (vedi sopra)
+  2. Cerca l'errore esatto su Google
+  3. Apri una issue su GitHub con:
+     - Descrizione del problema
+     - Messaggio di errore esatto
+     - Cosa hai gia provato
+
+================================================================================
+                      BUON LAVORO!
+================================================================================
+
+Se sei arrivato fin qui e tutto funziona, complimenti!
+
+Prossimi passi:
+  1. Personalizza i testi e le immagini nel sito
+  2. Configura i pagamenti Stripe (vedi README.md)
+  3. Quando sei pronto, metti online il sito (vedi sezione "Produzione")
+
+================================================================================
+Versione: 4.0.0 | Ultimo aggiornamento: Marzo 2026
+================================================================================

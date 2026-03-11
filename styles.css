@@ -141,7 +141,7 @@ body {
     padding: 0 20px;
 }
 
-/* ===== TYPOGRAPHY ===== */
+/* ===== TYPOGRAPHY — Fluid Scaling ===== */
 h1, h2, h3, h4, h5, h6 {
     font-family: 'Playfair Display', serif;
     font-weight: 700;
@@ -150,19 +150,20 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 h1 {
-    font-size: 3.5rem;
+    font-size: clamp(1.75rem, 4vw + 1rem, 3.5rem);
     font-weight: 800;
     letter-spacing: -1px;
     line-height: 1.1;
 }
 
 h2 {
-    font-size: 2.8rem;
+    font-size: clamp(1.5rem, 3vw + 0.8rem, 2.8rem);
     font-weight: 700;
     line-height: 1.2;
 }
 
 h3 {
+    font-size: clamp(1.1rem, 1.5vw + 0.6rem, 1.5rem);
     font-weight: 600;
 }
 
@@ -409,17 +410,18 @@ p {
 }
 
 .hero-title {
-    font-size: 3.5rem;
+    font-size: clamp(1.6rem, 5vw + 0.8rem, 4rem);
     margin-bottom: var(--space-md);
     text-shadow: 2px 2px 12px rgba(0, 0, 0, 0.25);
-    letter-spacing: 1px;
+    letter-spacing: clamp(0px, 0.2vw, 1px);
     font-family: 'Playfair Display', serif;
     font-weight: 900;
     color: white;
+    line-height: 1.15;
 }
 
 .hero-subtitle {
-    font-size: 1.35rem;
+    font-size: clamp(0.9rem, 1.5vw + 0.5rem, 1.55rem);
     margin-bottom: var(--space-2xl);
     font-family: 'Lora', serif;
     font-weight: 500;
@@ -502,10 +504,10 @@ p {
 
 /* Buttons - Modern Style */
 .btn {
-    padding: 14px var(--space-xl);
+    padding: clamp(10px, 1.5vw + 6px, 14px) clamp(20px, 3vw + 10px, 32px);
     border: none;
     border-radius: 999px;
-    font-size: 1rem;
+    font-size: clamp(0.85rem, 0.5vw + 0.7rem, 1rem);
     cursor: pointer;
     transition: transform var(--transition-base), opacity var(--transition-base), box-shadow var(--transition-base);
     font-weight: 600;
@@ -517,6 +519,7 @@ p {
     letter-spacing: 0.3px;
     position: relative;
     overflow: hidden;
+    min-height: 44px;
 }
 
 .btn-primary {
@@ -551,8 +554,8 @@ p {
 }
 
 .btn-large {
-    padding: var(--space-md) var(--space-2xl);
-    font-size: 1.1rem;
+    padding: clamp(12px, 1.5vw + 8px, 16px) clamp(32px, 4vw + 16px, 48px);
+    font-size: clamp(0.9rem, 0.5vw + 0.75rem, 1.1rem);
     width: 100%;
 }
 
@@ -662,7 +665,7 @@ p {
 }
 
 .about-card h3 {
-    font-size: 1.5rem;
+    font-size: clamp(1.1rem, 1vw + 0.8rem, 1.5rem);
     margin-bottom: var(--space-sm);
     color: var(--color-text-dark);
     font-family: 'Playfair Display', serif;
@@ -743,7 +746,7 @@ p {
 }
 
 .room-info h3 {
-    font-size: 1.6rem;
+    font-size: clamp(1.2rem, 1vw + 0.9rem, 1.6rem);
     margin-bottom: var(--space-sm);
     color: var(--color-text-dark);
     font-family: 'Playfair Display', serif;
@@ -802,7 +805,7 @@ p {
 
 /* Prezzo in marrone, in evidenza */
 .room-price {
-    font-size: 1.9rem;
+    font-size: clamp(1.4rem, 1.5vw + 1rem, 1.9rem);
     color: var(--color-brown-primary);
     margin-bottom: var(--space-lg);
     font-weight: 700;
@@ -1249,14 +1252,6 @@ p {
     .contact {
         padding: 120px 20px;
     }
-
-    .hero-title {
-        font-size: 4rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1.55rem;
-    }
 }
 
 /* Tablet Landscape (1024px - 1439px) */
@@ -1287,20 +1282,11 @@ p {
         padding: 110px 30px 90px;
     }
 
-    .hero-title {
-        font-size: 2.8rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1.2rem;
-    }
-
     .about h2,
     .rooms h2,
     .booking h2,
     .reviews h2,
     .contact h2 {
-        font-size: 2.3rem;
         margin-bottom: 3rem;
     }
 
@@ -1337,15 +1323,6 @@ p {
         grid-template-columns: 1fr 1fr;
         gap: var(--space-md);
     }
-
-    .btn {
-        padding: 12px var(--space-xl);
-        font-size: 0.95rem;
-    }
-
-    .btn-large {
-        padding: 14px var(--space-2xl);
-    }
 }
 
 /* Mobile Landscape & Small Tablet (600px - 768px) */
@@ -1369,20 +1346,11 @@ p {
         padding: 90px 20px 70px;
     }
 
-    .hero-title {
-        font-size: 2.2rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1rem;
-    }
-
     .about h2,
     .rooms h2,
     .booking h2,
     .reviews h2,
     .contact h2 {
-        font-size: 2rem;
         margin-bottom: 2.5rem;
     }
 
@@ -1449,11 +1417,6 @@ p {
 
     .room-card:hover {
         transform: translateY(-6px);
-    }
-
-    .btn {
-        padding: 11px var(--space-lg);
-        font-size: 0.9rem;
     }
 }
 
@@ -1538,23 +1501,6 @@ p {
         padding: 32px 20px 48px;
     }
 
-    .hero-title {
-        font-size: 1.75rem;
-        margin-bottom: var(--space-sm);
-        letter-spacing: 0;
-        line-height: 1.3;
-    }
-
-    .hero-subtitle {
-        font-size: 0.95rem;
-        margin-bottom: var(--space-xl);
-    }
-
-    .hero .btn {
-        padding: 10px var(--space-xl);
-        font-size: 0.9rem;
-    }
-
     /* Sections */
     .about,
     .rooms,
@@ -1569,7 +1515,6 @@ p {
     .booking h2,
     .reviews h2,
     .contact h2 {
-        font-size: 1.7rem;
         margin-bottom: var(--space-xl);
     }
 
@@ -1598,11 +1543,6 @@ p {
         margin-bottom: var(--space-md);
     }
 
-    .about-card h3 {
-        font-size: 1.2rem;
-        margin-bottom: var(--space-sm);
-    }
-
     .about-card p {
         font-size: 0.875rem;
     }
@@ -1621,11 +1561,6 @@ p {
 
     .room-info {
         padding: var(--space-md);
-    }
-
-    .room-info h3 {
-        font-size: 1.3rem;
-        margin-bottom: var(--space-xs);
     }
 
     .room-info p {
@@ -1651,7 +1586,6 @@ p {
     }
 
     .room-price {
-        font-size: 1.6rem;
         margin-bottom: var(--space-md);
     }
 
@@ -1710,18 +1644,7 @@ p {
         margin-top: var(--space-sm);
     }
 
-    .btn {
-        padding: 12px var(--space-xl);
-        font-size: 0.95rem;
-        min-height: 44px;
-    }
-
-    .btn-large {
-        width: 100%;
-        padding: var(--space-md) var(--space-xl);
-        font-size: 1rem;
-    }
-
+    .btn-large,
     .btn-secondary {
         width: 100%;
     }
@@ -1834,20 +1757,11 @@ p {
         padding: 32px 18px 44px;
     }
 
-    .hero-title {
-        font-size: 1.5rem;
-    }
-
-    .hero-subtitle {
-        font-size: 0.875rem;
-    }
-
     .about h2,
     .rooms h2,
     .booking h2,
     .reviews h2,
     .contact h2 {
-        font-size: 1.4rem;
         margin-bottom: var(--space-lg);
     }
 
@@ -1863,11 +1777,6 @@ p {
     .room-info,
     .booking-form {
         padding: var(--space-md);
-    }
-
-    .btn {
-        padding: 10px var(--space-md);
-        font-size: 0.85rem;
     }
 
     .icon-box {

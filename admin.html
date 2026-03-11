@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Admin Dashboard - Luxury Hotel</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:wght@400;500;600&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body class="admin-body">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="logo">
+                <i class="fas fa-hotel"></i>
+                <span>Luxury Hotel</span>
+            </a>
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="#dashboard" class="nav-item active" data-section="dashboard">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#bookings" class="nav-item" data-section="bookings">
+                <i class="fas fa-calendar-alt"></i>
+                <span>Prenotazioni</span>
+            </a>
+            <a href="#revenue" class="nav-item" data-section="revenue">
+                <i class="fas fa-euro-sign"></i>
+                <span>Guadagni</span>
+            </a>
+            <a href="#rooms" class="nav-item" data-section="rooms">
+                <i class="fas fa-bed"></i>
+                <span>Camere</span>
+            </a>
+            <a href="#settings" class="nav-item" data-section="settings">
+                <i class="fas fa-cog"></i>
+                <span>Impostazioni</span>
+            </a>
+            <a href="#users" class="nav-item" data-section="users">
+                <i class="fas fa-users-cog"></i>
+                <span>Gestione Admin</span>
+                <span class="pending-badge" id="pendingBadge" style="display: none;">0</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <a href="index.html" class="nav-item">
+                <i class="fas fa-external-link-alt"></i>
+                <span>Vai al Sito</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <button class="menu-toggle" id="menuToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+
+            <div class="topbar-search">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Cerca prenotazioni..." id="globalSearch">
+            </div>
+
+            <div class="topbar-actions">
+                <button class="topbar-btn" id="refreshData" title="Aggiorna dati">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="topbar-btn" id="exportData" title="Esporta dati">
+                    <i class="fas fa-download"></i>
+                </button>
+                <div class="admin-profile">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="adminUsername">Admin</span>
+                </div>
+                <button class="topbar-btn logout-btn" id="logoutBtn" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="content-section active">
+            <div class="section-header">
+                <h1><i class="fas fa-chart-line"></i> Dashboard</h1>
+                <p>Panoramica delle performance dell'hotel</p>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalBookings">0</h3>
+                        <p>Prenotazioni Totali</p>
+                    </div>
+                    <div class="stat-trend up" id="bookingsTrend">
+                        <i class="fas fa-arrow-up"></i> <span>0%</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon green">
+                        <i class="fas fa-euro-sign"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalRevenue">€0</h3>
+                        <p>Guadagni Totali</p>
+                    </div>
+                    <div class="stat-trend up" id="revenueTrend">
+                        <i class="fas fa-arrow-up"></i> <span>0%</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon orange">
+                        <i class="fas fa-bed"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="occupancyRate">0%</h3>
+                        <p>Tasso Occupazione</p>
+                    </div>
+                    <div class="stat-trend" id="occupancyTrend">
+                        <i class="fas fa-minus"></i> <span>Stabile</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon purple">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="pendingPayments">0</h3>
+                        <p>Pagamenti in Attesa</p>
+                    </div>
+                    <div class="stat-trend warning" id="pendingTrend">
+                        <i class="fas fa-exclamation-circle"></i> <span>Da gestire</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="charts-grid">
+                <div class="chart-card large">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-area"></i> Andamento Guadagni</h3>
+                        <div class="chart-filters">
+                            <button class="chart-filter active" data-period="week">7 giorni</button>
+                            <button class="chart-filter" data-period="month">30 giorni</button>
+                            <button class="chart-filter" data-period="year">12 mesi</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-pie"></i> Camere per Tipo</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="roomsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Bookings -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3><i class="fas fa-history"></i> Prenotazioni Recenti</h3>
+                    <a href="#bookings" class="view-all" data-section="bookings">Vedi tutte <i class="fas fa-arrow-right"></i></a>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Ospite</th>
+                                <th>Camera</th>
+                                <th>Check-in</th>
+                                <th>Check-out</th>
+                                <th>Totale</th>
+                                <th>Stato</th>
+                                <th>Pagamento</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentBookingsTable">
+                            <tr>
+                                <td colspan="8" class="loading-row">
+                                    <i class="fas fa-spinner fa-spin"></i> Caricamento...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bookings Section -->
+        <section id="bookings" class="content-section">
+            <div class="section-header">
+                <h1><i class="fas fa-calendar-alt"></i> Gestione Prenotazioni</h1>
+                <p>Visualizza e gestisci tutte le prenotazioni</p>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <label>Stato</label>
+                    <select id="filterStatus">
+                        <option value="">Tutti</option>
+                        <option value="confirmed">Confermate</option>
+                        <option value="paid">Pagate</option>
+                        <option value="pending">In attesa</option>
+                        <option value="cancelled">Cancellate</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Pagamento</label>
+                    <select id="filterPayment">
+                        <option value="">Tutti</option>
+                        <option value="completed">Completato</option>
+                        <option value="pending">In attesa</option>
+                        <option value="pending_transfer">Bonifico</option>
+                        <option value="failed">Fallito</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Camera</label>
+                    <select id="filterRoom">
+                        <option value="">Tutte</option>
+                        <option value="Standard">Standard</option>
+                        <option value="Deluxe">Deluxe</option>
+                        <option value="Suite">Suite</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Da</label>
+                    <input type="date" id="filterDateFrom">
+                </div>
+                <div class="filter-group">
+                    <label>A</label>
+                    <input type="date" id="filterDateTo">
+                </div>
+                <button class="btn btn-secondary" id="applyFilters">
+                    <i class="fas fa-filter"></i> Applica
+                </button>
+                <button class="btn btn-outline" id="resetFilters">
+                    <i class="fas fa-times"></i> Reset
+                </button>
+            </div>
+
+            <!-- Bookings Table -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3>Lista Prenotazioni <span class="badge" id="bookingsCount">0</span></h3>
+                    <div class="table-actions">
+                        <button class="btn btn-sm" id="exportBookings">
+                            <i class="fas fa-file-excel"></i> Esporta CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table" id="bookingsTable">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAll"></th>
+                                <th data-sort="booking_id">ID <i class="fas fa-sort"></i></th>
+                                <th data-sort="name">Ospite <i class="fas fa-sort"></i></th>
+                                <th data-sort="email">Email</th>
+                                <th data-sort="room_type">Camera <i class="fas fa-sort"></i></th>
+                                <th data-sort="check_in">Check-in <i class="fas fa-sort"></i></th>
+                                <th data-sort="check_out">Check-out</th>
+                                <th data-sort="nights">Notti</th>
+                                <th data-sort="total_price">Totale <i class="fas fa-sort"></i></th>
+                                <th data-sort="status">Stato</th>
+                                <th data-sort="payment_status">Pagamento</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookingsTableBody">
+                            <tr>
+                                <td colspan="12" class="loading-row">
+                                    <i class="fas fa-spinner fa-spin"></i> Caricamento...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-footer">
+                    <div class="pagination" id="bookingsPagination"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Revenue Section -->
+        <section id="revenue" class="content-section">
+            <div class="section-header">
+                <h1><i class="fas fa-euro-sign"></i> Analisi Guadagni</h1>
+                <p>Report dettagliato dei ricavi</p>
+            </div>
+
+            <!-- Revenue Stats -->
+            <div class="stats-grid cols-3">
+                <div class="stat-card highlight">
+                    <div class="stat-icon green">
+                        <i class="fas fa-coins"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="monthlyRevenue">€0</h3>
+                        <p>Guadagni questo mese</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="avgBookingValue">€0</h3>
+                        <p>Valore medio prenotazione</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">
+                        <i class="fas fa-moon"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="avgNights">0</h3>
+                        <p>Notti medie per soggiorno</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revenue by Room Type -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-bar"></i> Guadagni per Tipo Camera</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="revenueByRoomChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-line"></i> Guadagni Mensili</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="monthlyRevenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revenue Table -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3><i class="fas fa-list"></i> Dettaglio Transazioni</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>ID Prenotazione</th>
+                                <th>Ospite</th>
+                                <th>Camera</th>
+                                <th>Metodo</th>
+                                <th>Importo</th>
+                                <th>Stato</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTable">
+                            <tr>
+                                <td colspan="7" class="loading-row">
+                                    <i class="fas fa-spinner fa-spin"></i> Caricamento...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Rooms Section -->
+        <section id="rooms" class="content-section">
+            <div class="section-header">
+                <h1><i class="fas fa-bed"></i> Gestione Camere</h1>
+                <p>Panoramica disponibilità e occupazione</p>
+            </div>
+
+            <!-- Room Cards -->
+            <div class="rooms-grid">
+                <div class="room-status-card" data-room="Standard">
+                    <div class="room-header">
+                        <h3><i class="fas fa-bed"></i> Camera Standard</h3>
+                        <span class="room-price">€120/notte</span>
+                    </div>
+                    <div class="room-stats">
+                        <div class="room-stat">
+                            <span class="label">Prenotazioni</span>
+                            <span class="value" id="standardBookings">0</span>
+                        </div>
+                        <div class="room-stat">
+                            <span class="label">Guadagni</span>
+                            <span class="value" id="standardRevenue">€0</span>
+                        </div>
+                        <div class="room-stat">
+                            <span class="label">Occupazione</span>
+                            <span class="value" id="standardOccupancy">0%</span>
+                        </div>
+                    </div>
+                    <div class="room-calendar" id="standardCalendar"></div>
+                </div>
+
+                <div class="room-status-card" data-room="Deluxe">
+                    <div class="room-header">
+                        <h3><i class="fas fa-star"></i> Camera Deluxe</h3>
+                        <span class="room-price">€180/notte</span>
+                    </div>
+                    <div class="room-stats">
+                        <div class="room-stat">
+                            <span class="label">Prenotazioni</span>
+                            <span class="value" id="deluxeBookings">0</span>
+                        </div>
+                        <div class="room-stat">
+                            <span class="label">Guadagni</span>
+                            <span class="value" id="deluxeRevenue">€0</span>
+                        </div>
+                        <div class="room-stat">
+                            <span class="label">Occupazione</span>
+                            <span class="value" id="deluxeOccupancy">0%</span>
+                        </div>
+                    </div>
+                    <div class="room-calendar" id="deluxeCalendar"></div>
+                </div>
+
+                <div class="room-status-card" data-room="Suite">
+                    <div class="room-header">
+                        <h3><i class="fas fa-crown"></i> Suite</h3>
+                        <span class="room-price">€280/notte</span>
+                    </div>
+                    <div class="room-stats">
+                        <div class="room-stat">
+                            <span class="label">Prenotazioni</span>
+                            <span class="value" id="suiteBookings">0</span>
+                        </div>
+                        <div class="room-stat">
+                            <span class="label">Guadagni</span>
+                            <span class="value" id="suiteRevenue">€0</span>
+                        </div>
+                        <div class="room-stat">
+                            <span class="label">Occupazione</span>
+                            <span class="value" id="suiteOccupancy">0%</span>
+                        </div>
+                    </div>
+                    <div class="room-calendar" id="suiteCalendar"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings" class="content-section">
+            <div class="section-header">
+                <h1><i class="fas fa-cog"></i> Impostazioni</h1>
+                <p>Configura le opzioni dell'hotel</p>
+            </div>
+
+            <div class="settings-grid">
+                <div class="settings-card">
+                    <h3><i class="fas fa-tag"></i> Prezzi Camere</h3>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label>Standard (€/notte)</label>
+                            <input type="number" id="priceStandard" value="120" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Deluxe (€/notte)</label>
+                            <input type="number" id="priceDeluxe" value="180" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Suite (€/notte)</label>
+                            <input type="number" id="priceSuite" value="280" min="0">
+                        </div>
+                        <button class="btn btn-primary" id="savePrices">
+                            <i class="fas fa-save"></i> Salva Prezzi
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h3><i class="fas fa-envelope"></i> Notifiche Email</h3>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="emailNewBooking" checked>
+                                <span>Notifica nuove prenotazioni</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="emailPayment" checked>
+                                <span>Notifica pagamenti ricevuti</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="emailCancellation" checked>
+                                <span>Notifica cancellazioni</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Email amministratore</label>
+                            <input type="email" id="adminEmail" value="admin@luxuryhotel.it">
+                        </div>
+                        <button class="btn btn-primary" id="saveNotifications">
+                            <i class="fas fa-save"></i> Salva
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h3><i class="fas fa-database"></i> Database</h3>
+                    <div class="settings-form">
+                        <p class="settings-info">
+                            <i class="fas fa-check-circle text-success"></i>
+                            Database connesso e funzionante
+                        </p>
+                        <div class="db-stats">
+                            <div class="db-stat">
+                                <span>Prenotazioni:</span>
+                                <strong id="dbBookingsCount">0</strong>
+                            </div>
+                            <div class="db-stat">
+                                <span>Transazioni:</span>
+                                <strong id="dbPaymentsCount">0</strong>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" id="backupDb">
+                            <i class="fas fa-download"></i> Esporta Backup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Users Management Section -->
+        <section id="users" class="content-section">
+            <div class="section-header">
+                <h1><i class="fas fa-users-cog"></i> Gestione Amministratori</h1>
+                <p>Approva o rifiuta le richieste di accesso admin</p>
+            </div>
+
+            <!-- Pending Users -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3><i class="fas fa-user-clock"></i> Utenti in Attesa di Approvazione <span class="badge" id="pendingCount">0</span></h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Data Registrazione</th>
+                                <th>Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingUsersTable">
+                            <tr>
+                                <td colspan="4" class="loading-row">
+                                    <i class="fas fa-spinner fa-spin"></i> Caricamento...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="info-box">
+                <div class="info-icon">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <div class="info-content">
+                    <h4>Come funziona</h4>
+                    <ul>
+                        <li>Gli utenti si registrano dalla pagina di login</li>
+                        <li>Ricevono un'email per verificare l'indirizzo</li>
+                        <li>Dopo la verifica, compaiono qui in attesa di approvazione</li>
+                        <li>Solo tu puoi approvare o rifiutare le richieste</li>
+                        <li>Gli utenti approvati riceveranno una notifica email</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Booking Detail Modal -->
+    <div id="bookingModal" class="modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-calendar-alt"></i> Dettaglio Prenotazione</h2>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body" id="bookingModalBody">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modalCancel">Chiudi</button>
+                <button class="btn btn-success" id="modalConfirmPayment">
+                    <i class="fas fa-check"></i> Conferma Pagamento
+                </button>
+                <button class="btn btn-danger" id="modalCancelBooking">
+                    <i class="fas fa-times"></i> Cancella Prenotazione
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Admin Script -->
+    <script src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Pagamento - Luxury Hotel</title>
+
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:wght@400;500;600&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="payment.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="navbar">
+                <a href="index.html" class="logo">
+                    <i class="fas fa-hotel"></i> Luxury Hotel
+                </a>
+                <nav class="nav">
+                    <a href="index.html">Home</a>
+                    <a href="index.html#rooms">Stanze</a>
+                    <a href="index.html#booking">Prenota</a>
+                    <a href="index.html#contact">Contatti</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Payment Section -->
+    <section class="payment-page">
+        <div class="container">
+            <div class="payment-header">
+                <h1><i class="fas fa-credit-card"></i> Pagamento Sicuro</h1>
+                <p>Completa il pagamento per confermare la tua prenotazione</p>
+            </div>
+
+            <!-- Timer sessione -->
+            <div class="payment-timer">
+                <i class="fas fa-clock"></i>
+                <span>Tempo rimanente: <span class="timer-value">15:00</span></span>
+            </div>
+
+            <div class="payment-container">
+                <!-- Riepilogo Prenotazione -->
+                <div class="booking-summary-card">
+                    <h3><i class="fas fa-receipt"></i> Riepilogo Prenotazione</h3>
+
+                    <div class="summary-details">
+                        <div class="summary-item">
+                            <span class="label">ID Prenotazione</span>
+                            <span class="value" id="summaryBookingId">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Camera</span>
+                            <span class="value" id="summaryRoom">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Ospite</span>
+                            <span class="value" id="summaryName">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Check-in</span>
+                            <span class="value" id="summaryCheckIn">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Check-out</span>
+                            <span class="value" id="summaryCheckOut">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Ospiti</span>
+                            <span class="value" id="summaryGuests">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Notti</span>
+                            <span class="value" id="summaryNights">-</span>
+                        </div>
+                    </div>
+
+                    <div class="summary-total">
+                        <span>Totale da Pagare</span>
+                        <span class="total-amount" id="summaryTotal">€0</span>
+                    </div>
+
+                    <div class="secure-badge">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>Pagamento sicuro con crittografia SSL a 256-bit</span>
+                    </div>
+                </div>
+
+                <!-- Form Pagamento -->
+                <div class="payment-form-card">
+                    <h3><i class="fas fa-lock"></i> Metodo di Pagamento</h3>
+
+                    <!-- Tabs metodi pagamento -->
+                    <div class="payment-methods">
+                        <button type="button" class="method-btn active" data-method="card">
+                            <i class="fas fa-credit-card"></i> Carta
+                        </button>
+                        <button type="button" class="method-btn" data-method="paypal">
+                            <i class="fab fa-paypal"></i> PayPal
+                        </button>
+                        <button type="button" class="method-btn" data-method="iban">
+                            <i class="fas fa-university"></i> Bonifico
+                        </button>
+                    </div>
+
+                    <form id="paymentForm" class="payment-form" novalidate>
+                        <!-- ===== CARTA DI CREDITO ===== -->
+                        <div id="cardPayment" class="payment-method-content">
+                            <!-- Preview carta -->
+                            <div class="card-preview">
+                                <div class="card-chip"></div>
+                                <div class="card-number-display">**** **** **** ****</div>
+                                <div class="card-info">
+                                    <div class="card-holder">
+                                        <span>Intestatario</span>
+                                        <strong>NOME COGNOME</strong>
+                                    </div>
+                                    <div class="card-expiry">
+                                        <span>Scadenza</span>
+                                        <strong>MM/AA</strong>
+                                    </div>
+                                </div>
+                                <i class="card-brand fas fa-credit-card"></i>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="cardName">Intestatario Carta *</label>
+                                <input
+                                    type="text"
+                                    id="cardName"
+                                    name="cardName"
+                                    placeholder="MARIO ROSSI"
+                                    autocomplete="cc-name"
+                                    data-required
+                                    required
+                                >
+                                <div class="error-message" id="cardNameError"></div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="cardNumber">Numero Carta *</label>
+                                <div class="input-with-icon">
+                                    <input
+                                        type="text"
+                                        id="cardNumber"
+                                        name="cardNumber"
+                                        placeholder="1234 5678 9012 3456"
+                                        maxlength="19"
+                                        inputmode="numeric"
+                                        autocomplete="cc-number"
+                                        data-required
+                                        required
+                                    >
+                                    <div class="card-icons">
+                                        <i class="fab fa-cc-visa"></i>
+                                        <i class="fab fa-cc-mastercard"></i>
+                                        <i class="fab fa-cc-amex"></i>
+                                    </div>
+                                </div>
+                                <div class="error-message" id="cardNumberError"></div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="cardExpiry">Scadenza *</label>
+                                    <input
+                                        type="text"
+                                        id="cardExpiry"
+                                        name="cardExpiry"
+                                        placeholder="MM/AA"
+                                        maxlength="5"
+                                        inputmode="numeric"
+                                        autocomplete="cc-exp"
+                                        data-required
+                                        required
+                                    >
+                                    <div class="error-message" id="cardExpiryError"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cardCvv">CVV *</label>
+                                    <div class="input-with-icon">
+                                        <input
+                                            type="text"
+                                            id="cardCvv"
+                                            name="cardCvv"
+                                            placeholder="123"
+                                            maxlength="4"
+                                            inputmode="numeric"
+                                            autocomplete="cc-csc"
+                                            data-required
+                                            required
+                                        >
+                                        <i class="fas fa-question-circle cvv-help" title="3 cifre sul retro della carta (4 per American Express)"></i>
+                                    </div>
+                                    <div class="error-message" id="cardCvvError"></div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="saveCard" name="saveCard">
+                                    <span>Salva carta per pagamenti futuri (opzionale)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- ===== PAYPAL ===== -->
+                        <div id="paypalPayment" class="payment-method-content" style="display: none;">
+                            <div class="paypal-info">
+                                <i class="fab fa-paypal"></i>
+                                <p>Verrai reindirizzato a PayPal per completare il pagamento in modo sicuro.</p>
+                                <p style="margin-top: 12px; font-size: 0.9rem; color: var(--color-text-light);">
+                                    Puoi pagare con il tuo conto PayPal o con una carta di credito/debito.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- ===== BONIFICO IBAN ===== -->
+                        <div id="ibanPayment" class="payment-method-content" style="display: none;">
+                            <div class="iban-info">
+                                <div class="bank-icon">
+                                    <i class="fas fa-university"></i>
+                                </div>
+                                <h4>Coordinate Bancarie per Bonifico</h4>
+
+                                <div class="iban-details">
+                                    <div class="iban-row">
+                                        <span class="iban-label">Beneficiario</span>
+                                        <span class="iban-value" id="ibanBeneficiary">Luxury Hotel S.r.l.</span>
+                                    </div>
+                                    <div class="iban-row">
+                                        <span class="iban-label">IBAN</span>
+                                        <span class="iban-value">
+                                            <span id="ibanNumber">IT60 X054 2811 1010 0000 0123 456</span>
+                                            <button type="button" class="copy-btn" title="Copia IBAN">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </span>
+                                    </div>
+                                    <div class="iban-row">
+                                        <span class="iban-label">BIC/SWIFT</span>
+                                        <span class="iban-value">
+                                            <span id="ibanBIC">BPPIITRRXXX</span>
+                                            <button type="button" class="copy-btn" title="Copia BIC">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </span>
+                                    </div>
+                                    <div class="iban-row">
+                                        <span class="iban-label">Causale</span>
+                                        <span class="iban-value">
+                                            <span id="ibanCausale">-</span>
+                                            <button type="button" class="copy-btn" title="Copia causale">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="iban-warning">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <div>
+                                        <strong>Importante:</strong> La prenotazione sarà confermata solo dopo la ricezione del bonifico (1-3 giorni lavorativi).
+                                        Indica sempre l'ID prenotazione come causale.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ===== TERMINI E CONDIZIONI ===== -->
+                        <div class="form-group" style="margin-top: var(--space-lg);">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="acceptTerms" name="acceptTerms" required>
+                                <span>
+                                    Accetto i <a href="#" class="link" onclick="return false;">Termini e Condizioni</a>
+                                    e la <a href="#" class="link" onclick="return false;">Privacy Policy</a> *
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- ===== PULSANTE PAGAMENTO ===== -->
+                        <button type="submit" class="btn btn-primary btn-large btn-pay" id="payBtn">
+                            <span class="btn-text">
+                                <i class="fas fa-lock"></i> Paga Ora <span id="btnAmount">€0</span>
+                            </span>
+                            <span class="btn-loader" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i> Elaborazione...
+                            </span>
+                        </button>
+                    </form>
+
+                    <!-- Badge sicurezza -->
+                    <div class="payment-security">
+                        <div class="security-item">
+                            <i class="fas fa-lock"></i>
+                            <span>SSL 256-bit</span>
+                        </div>
+                        <div class="security-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>PCI DSS</span>
+                        </div>
+                        <div class="security-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>3D Secure</span>
+                        </div>
+                        <div class="security-item">
+                            <i class="fas fa-user-shield"></i>
+                            <span>GDPR</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Elaborazione pagamento in corso...</p>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="successModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-icon success">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h2>Pagamento Completato!</h2>
+            <p>La tua prenotazione è stata confermata con successo.</p>
+
+            <div class="confirmation-details">
+                <div class="detail-row">
+                    <span>ID Prenotazione:</span>
+                    <strong id="confirmBookingId">-</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Importo Pagato:</span>
+                    <strong id="confirmAmount">-</strong>
+                </div>
+            </div>
+
+            <p class="email-notice">
+                <i class="fas fa-envelope"></i>
+                Una email di conferma è stata inviata a <strong id="confirmEmail">-</strong>
+            </p>
+
+            <a href="index.html" class="btn btn-primary">
+                <i class="fas fa-home"></i> Torna alla Home
+            </a>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification" class="notification"></div>
+
+    <!-- JavaScript -->
+    <script src="payment.js"></script>
+</body>
+</html>

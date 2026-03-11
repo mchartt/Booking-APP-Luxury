@@ -1,17 +1,66 @@
 <?php
-// api/bookings.php - REST API per prenotazioni con error handling robusto
+/**
+ * api/bookings.php - REST API per prenotazioni
+ * Con error handling robusto e protezione SQL injection
+ */
+
+// Secure session cookie settings
+$isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => $isSecure,
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+
+session_start();
+
+// Security headers centralizzati
+require_once __DIR__ . '/security_headers.php';
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 
 require_once '../config.php';
 
-// Gestisci OPTIONS richieste (CORS preflight)
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
+/**
+ * Verifica se l'utente è autenticato come admin
+ */
+function requireAdminAuth() {
+    if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+        http_response_code(401);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Autenticazione richiesta',
+            'code' => 'AUTH_REQUIRED'
+        ]);
+        exit;
+    }
+}
+
+/**
+ * Valida token CSRF per richieste sensibili
+ */
+function validateCsrfToken() {
+    $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+
+    if (!$token) {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $token = $input['csrf_token'] ?? null;
+    }
+
+    if (empty($_SESSION['csrf_token']) || empty($token)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Token CSRF mancante']);
+        exit;
+    }
+
+    if (!hash_equals($_SESSION['csrf_token'], $token)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Token CSRF non valido']);
+        exit;
+    }
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -35,6 +84,7 @@ try {
             break;
 
         case 'POST':
+            validateCsrfToken();
             createBooking();
             break;
 
@@ -60,25 +110,40 @@ try {
 // ===== FUNZIONI API =====
 
 /**
- * Ritorna tutte le prenotazioni (limitate a 100)
+ * Ritorna tutte le prenotazioni (limitate a 100) - Solo per admin autenticati
  */
 function getAllBookings() {
     global $conn;
 
+    // SICUREZZA: Richiede autenticazione admin
+    requireAdminAuth();
+
     try {
-        $query = "SELECT id, room_type, check_in, check_out, guests, name, email,
-                  created_at, status FROM prenotazioni ORDER BY created_at DESC LIMIT 100";
+        // Prepared statement (anche se senza parametri, per consistenza)
+        $stmt = $conn->prepare("SELECT id, booking_id, room_type, check_in, check_out, guests, name, email,
+                  created_at, status, payment_status FROM prenotazioni ORDER BY created_at DESC LIMIT 100");
 
-        $result = $conn->query($query);
-
-        if (!$result) {
-            throw new Exception('Errore nella query: ' . $conn->error);
+        if (!$stmt) {
+            error_log('GetAllBookings Query Error: ' . $conn->error);
+            throw new Exception('Errore nel caricamento prenotazioni. Riprova più tardi.');
         }
+
+        $stmt->execute();
+        $result = $stmt->get_result();
 
         $bookings = [];
         while ($row = $result->fetch_assoc()) {
+            // Oscura email parzialmente per privacy
+            if (isset($row['email'])) {
+                $parts = explode('@', $row['email']);
+                if (count($parts) === 2) {
+                    $row['email'] = substr($parts[0], 0, 3) . '***@' . $parts[1];
+                }
+            }
             $bookings[] = $row;
         }
+
+        $stmt->close();
 
         echo json_encode([
             'success' => true,
@@ -147,7 +212,7 @@ function checkAvailability() {
 }
 
 /**
- * Crea nuova prenotazione
+ * Crea nuova prenotazione (con prepared statements per sicurezza)
  */
 function createBooking() {
     global $conn;
@@ -158,6 +223,11 @@ function createBooking() {
         if (!$input) {
             throw new Exception('Request JSON non valido');
         }
+
+        // Mappatura chiavi frontend -> backend
+        $input['room_type'] = $input['room_type'] ?? $input['roomType'] ?? '';
+        $input['check_in'] = $input['check_in'] ?? $input['checkIn'] ?? '';
+        $input['check_out'] = $input['check_out'] ?? $input['checkOut'] ?? '';
 
         // Validazione dati
         $validation = validateBooking($input);
@@ -172,15 +242,26 @@ function createBooking() {
             return;
         }
 
-        // Sanitizza input
-        $roomType = sanitize($input['room_type']);
-        $checkIn = sanitize($input['check_in']);
-        $checkOut = sanitize($input['check_out']);
+        // Estrai e valida input (NO sanitize per prepared statements)
+        $roomType = trim($input['room_type']);
+        $checkIn = trim($input['check_in']);
+        $checkOut = trim($input['check_out']);
         $guests = (int)$input['guests'];
-        $name = sanitize($input['name']);
-        $email = sanitize($input['email']);
-        $phone = sanitize($input['phone']);
-        $requests = sanitize($input['requests'] ?? '');
+        $name = trim($input['name']);
+        $email = trim($input['email']);
+        $phone = trim($input['phone']);
+        $requests = trim($input['requests'] ?? '');
+
+        // Validazione aggiuntiva tipo stanza (whitelist)
+        $validRoomTypes = ['Standard', 'Deluxe', 'Suite'];
+        if (!in_array($roomType, $validRoomTypes)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Tipo di stanza non valido'
+            ]);
+            return;
+        }
 
         // Calcola notti e prezzo
         try {
@@ -191,33 +272,56 @@ function createBooking() {
             throw new Exception('Errore nel calcolo delle notti');
         }
 
+        // Prezzi fissi lato server (non fidarsi del client)
         $roomPrices = [
             'Standard' => 120,
             'Deluxe' => 180,
             'Suite' => 280
         ];
 
-        $pricePerNight = $roomPrices[$roomType] ?? 0;
+        $pricePerNight = $roomPrices[$roomType];
         $totalPrice = $nights * $pricePerNight;
 
-        // Crea ID univoco
-        $bookingId = 'BK' . date('YmdHis') . '_' . substr(md5($email . time() . rand()), 0, 8);
+        // Genera ID univoco sicuro
+        $bookingId = 'BK' . date('YmdHis') . '_' . bin2hex(random_bytes(4));
 
-        // Prepara query
-        $query = "INSERT INTO prenotazioni
-                  (booking_id, room_type, check_in, check_out, guests, name, email, phone,
-                   requests, nights, price_per_night, total_price, status, created_at)
-                  VALUES
-                  ('$bookingId', '$roomType', '$checkIn', '$checkOut', $guests, '$name',
-                   '$email', '$phone', '$requests', $nights, $pricePerNight, $totalPrice,
-                   'confirmed', NOW())";
+        // Prepared statement per prevenire SQL injection
+        $stmt = $conn->prepare("INSERT INTO prenotazioni
+            (booking_id, room_type, check_in, check_out, guests, name, email, phone,
+             requests, nights, price_per_night, total_price, status, payment_status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'pending', NOW())");
 
-        if (!$conn->query($query)) {
-            throw new Exception('Errore nel salvataggio della prenotazione: ' . $conn->error);
+        if (!$stmt) {
+            error_log('CreateBooking Query Error: ' . $conn->error);
+            throw new Exception('Errore nel salvataggio della prenotazione. Riprova più tardi.');
         }
 
+        $stmt->bind_param(
+            "ssssissssidi",
+            $bookingId,
+            $roomType,
+            $checkIn,
+            $checkOut,
+            $guests,
+            $name,
+            $email,
+            $phone,
+            $requests,
+            $nights,
+            $pricePerNight,
+            $totalPrice
+        );
+
+        if (!$stmt->execute()) {
+            error_log('CreateBooking Execute Error: ' . $stmt->error);
+            throw new Exception('Errore nel salvataggio della prenotazione. Riprova più tardi.');
+        }
+
+        $insertId = $conn->insert_id;
+        $stmt->close();
+
         $bookingData = [
-            'id' => $conn->insert_id,
+            'id' => $insertId,
             'booking_id' => $bookingId,
             'room_type' => $roomType,
             'check_in' => $checkIn,

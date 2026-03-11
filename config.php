@@ -1,21 +1,65 @@
 <?php
-// config.php - Configurazione database con error handling robusto
+/**
+ * config.php - Configurazione database con auto-setup
+ * Il database e le tabelle vengono creati automaticamente se non esistono
+ *
+ * SICUREZZA: Le credenziali DB devono essere configurate tramite variabili d'ambiente.
+ * Copia .env.example in .env e configura i valori appropriati.
+ */
 
-defined('DB_HOST') || define('DB_HOST', 'localhost');
-defined('DB_USER') || define('DB_USER', 'root');
-defined('DB_PASS') || define('DB_PASS', '');
-defined('DB_NAME') || define('DB_NAME', 'luxury_hotel');
+// Carica variabili d'ambiente da file .env se esiste
+$envFile = __DIR__ . '/.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        // Ignora commenti
+        if (strpos(trim($line), '#') === 0) {
+            continue;
+        }
+        // Parse NAME=value
+        if (strpos($line, '=') !== false) {
+            list($name, $value) = explode('=', $line, 2);
+            $name = trim($name);
+            $value = trim($value);
+            // Rimuovi virgolette se presenti
+            $value = trim($value, '"\'');
+            if (!empty($name) && !isset($_ENV[$name])) {
+                $_ENV[$name] = $value;
+                putenv("$name=$value");
+            }
+        }
+    }
+}
+
+// Configurazione database da variabili d'ambiente (con fallback solo per sviluppo locale)
+defined('DB_HOST') || define('DB_HOST', $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost');
+defined('DB_USER') || define('DB_USER', $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '');
+defined('DB_PASS') || define('DB_PASS', $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '');
+defined('DB_NAME') || define('DB_NAME', $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'luxury_hotel');
+
+// Verifica che le credenziali siano configurate
+if (empty(DB_USER)) {
+    error_log('SECURITY WARNING: DB_USER non configurato. Configura le variabili d\'ambiente nel file .env');
+}
 
 // Variabile globale per connessione
 $conn = null;
 
-// Crea connessione con error handling completo
+// Crea connessione con auto-setup database
 try {
-    $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+    // Prima connessione senza database (per crearlo se non esiste)
+    $conn = new mysqli(DB_HOST, DB_USER, DB_PASS);
 
-    // Check connessione
     if ($conn->connect_error) {
         throw new Exception('Connessione fallita: ' . $conn->connect_error);
+    }
+
+    // Crea database se non esiste
+    $conn->query("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+
+    // Seleziona il database
+    if (!$conn->select_db(DB_NAME)) {
+        throw new Exception('Impossibile selezionare il database: ' . $conn->error);
     }
 
     // Imposta charset UTF-8
@@ -23,31 +67,231 @@ try {
         throw new Exception('Errore nel setting charset: ' . $conn->error);
     }
 
+    // Auto-setup tabelle
+    runAutoMigrations($conn);
+
 } catch (Exception $e) {
-    // Log l'errore (opzionale)
     error_log('Database Connection Error: ' . $e->getMessage());
 
-    http_response_code(503);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Errore di connessione al database. Riprova più tardi.',
-        'errors' => ['Servizio temporaneamente non disponibile']
-    ]);
-    exit;
+    // Se siamo in una richiesta API, restituisci JSON
+    if (strpos($_SERVER['REQUEST_URI'] ?? '', '/api/') !== false) {
+        http_response_code(503);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Errore di connessione al database. Riprova più tardi.',
+            'errors' => ['Servizio temporaneamente non disponibile']
+        ]);
+        exit;
+    }
+}
+
+// ===== AUTO-MIGRATION SYSTEM =====
+
+/**
+ * Esegue migrazioni automatiche per creare/aggiornare tabelle
+ */
+function runAutoMigrations($conn) {
+    // Flag per evitare migrazioni ripetute nella stessa richiesta
+    static $migrationsRun = false;
+    if ($migrationsRun) return;
+    $migrationsRun = true;
+
+    try {
+        // 1. Crea tabella prenotazioni se non esiste
+        createPrenotazioniTable($conn);
+
+        // 2. Aggiungi colonne pagamento se mancanti
+        addPaymentColumns($conn);
+
+        // 3. Crea tabella payments se non esiste
+        createPaymentsTable($conn);
+
+        // 4. Crea indici se mancanti
+        createIndexes($conn);
+
+        // 5. Crea tabella admin_users se non esiste
+        createAdminUsersTable($conn);
+
+    } catch (Exception $e) {
+        error_log('Auto-Migration Error: ' . $e->getMessage());
+        // Non bloccare l'applicazione per errori di migrazione
+    }
+}
+
+/**
+ * Crea tabella prenotazioni
+ */
+function createPrenotazioniTable($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS prenotazioni (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        booking_id VARCHAR(50) UNIQUE NOT NULL,
+        room_type ENUM('Standard', 'Deluxe', 'Suite') NOT NULL,
+        check_in DATE NOT NULL,
+        check_out DATE NOT NULL,
+        guests INT NOT NULL DEFAULT 1,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) NOT NULL,
+        requests TEXT,
+        nights INT NOT NULL DEFAULT 1,
+        price_per_night DECIMAL(10,2) NOT NULL,
+        total_price DECIMAL(10,2) NOT NULL,
+        status ENUM('pending', 'confirmed', 'paid', 'cancelled') DEFAULT 'pending',
+        payment_status ENUM('pending', 'processing', 'completed', 'failed', 'pending_transfer', 'refunded') DEFAULT 'pending',
+        payment_method ENUM('card', 'paypal', 'iban') NULL,
+        transaction_id VARCHAR(100) NULL,
+        paid_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if (!$conn->query($sql)) {
+        throw new Exception('Errore creazione tabella prenotazioni: ' . $conn->error);
+    }
+}
+
+/**
+ * Aggiunge colonne pagamento alla tabella esistente
+ */
+function addPaymentColumns($conn) {
+    $columns = [
+        'payment_status' => "ALTER TABLE prenotazioni ADD COLUMN payment_status ENUM('pending', 'processing', 'completed', 'failed', 'pending_transfer', 'refunded') DEFAULT 'pending' AFTER status",
+        'payment_method' => "ALTER TABLE prenotazioni ADD COLUMN payment_method ENUM('card', 'paypal', 'iban') NULL AFTER payment_status",
+        'transaction_id' => "ALTER TABLE prenotazioni ADD COLUMN transaction_id VARCHAR(100) NULL AFTER payment_method",
+        'paid_at' => "ALTER TABLE prenotazioni ADD COLUMN paid_at TIMESTAMP NULL AFTER transaction_id",
+        'updated_at' => "ALTER TABLE prenotazioni ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ];
+
+    foreach ($columns as $column => $sql) {
+        if (!columnExists($conn, 'prenotazioni', $column)) {
+            $conn->query($sql);
+            // Ignora errori (colonna potrebbe già esistere con nome diverso)
+        }
+    }
+}
+
+/**
+ * Crea tabella pagamenti
+ */
+function createPaymentsTable($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS payments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        booking_id VARCHAR(50) NOT NULL,
+        transaction_id VARCHAR(100) UNIQUE NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        method ENUM('card', 'paypal', 'iban') NOT NULL,
+        status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'pending',
+        card_last_four VARCHAR(4) NULL,
+        card_brand VARCHAR(20) NULL,
+        paypal_email VARCHAR(255) NULL,
+        error_message TEXT NULL,
+        ip_address VARCHAR(45) NULL,
+        user_agent TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_booking_id (booking_id),
+        INDEX idx_transaction_id (transaction_id),
+        INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if (!$conn->query($sql)) {
+        throw new Exception('Errore creazione tabella payments: ' . $conn->error);
+    }
+}
+
+/**
+ * Crea tabella admin_users per autenticazione
+ */
+function createAdminUsersTable($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS admin_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        status ENUM('pending', 'active', 'rejected', 'suspended') DEFAULT 'pending',
+        email_verified BOOLEAN DEFAULT FALSE,
+        verification_token VARCHAR(100) NULL,
+        token_expires_at TIMESTAMP NULL,
+        approved_by INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP NULL,
+        INDEX idx_email (email),
+        INDEX idx_status (status),
+        INDEX idx_verification_token (verification_token)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if (!$conn->query($sql)) {
+        throw new Exception('Errore creazione tabella admin_users: ' . $conn->error);
+    }
+
+    // Crea tabella login_attempts per rate limiting
+    $sql = "CREATE TABLE IF NOT EXISTS login_attempts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ip_address VARCHAR(45) NOT NULL,
+        username VARCHAR(50) NULL,
+        attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        success BOOLEAN DEFAULT FALSE,
+        INDEX idx_ip (ip_address),
+        INDEX idx_attempted_at (attempted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if (!$conn->query($sql)) {
+        throw new Exception('Errore creazione tabella login_attempts: ' . $conn->error);
+    }
+}
+
+/**
+ * Crea indici per performance
+ */
+function createIndexes($conn) {
+    $indexes = [
+        "CREATE INDEX idx_payment_status ON prenotazioni(payment_status)",
+        "CREATE INDEX idx_booking_id ON prenotazioni(booking_id)",
+        "CREATE INDEX idx_check_in ON prenotazioni(check_in)",
+        "CREATE INDEX idx_status ON prenotazioni(status)",
+        "CREATE INDEX idx_email ON prenotazioni(email)"
+    ];
+
+    foreach ($indexes as $sql) {
+        // Ignora errori se indice già esiste
+        @$conn->query($sql);
+    }
+}
+
+/**
+ * Verifica se una colonna esiste nella tabella
+ * SICUREZZA: Usa whitelist per prevenire SQL injection sugli identificatori
+ */
+function columnExists($conn, $table, $column) {
+    // Whitelist delle tabelle permesse
+    $allowedTables = ['prenotazioni', 'payments', 'admin_users', 'login_attempts'];
+    if (!in_array($table, $allowedTables, true)) {
+        error_log("columnExists: tabella non autorizzata: $table");
+        return false;
+    }
+
+    // Whitelist delle colonne permesse (tutte le colonne usate nel sistema)
+    $allowedColumns = [
+        'id', 'booking_id', 'room_type', 'check_in', 'check_out', 'guests',
+        'name', 'email', 'phone', 'requests', 'nights', 'price_per_night',
+        'total_price', 'status', 'payment_status', 'payment_method',
+        'transaction_id', 'paid_at', 'created_at', 'updated_at',
+        'amount', 'method', 'card_last_four', 'card_brand', 'paypal_email',
+        'error_message', 'ip_address', 'user_agent',
+        'username', 'password_hash', 'email_verified', 'verification_token',
+        'token_expires_at', 'approved_by', 'last_login', 'attempted_at', 'success'
+    ];
+    if (!in_array($column, $allowedColumns, true)) {
+        error_log("columnExists: colonna non autorizzata: $column");
+        return false;
+    }
+
+    // Ora è sicuro usare gli identificatori (già validati via whitelist)
+    $result = $conn->query("SHOW COLUMNS FROM `$table` LIKE '$column'");
+    return $result && $result->num_rows > 0;
 }
 
 // ===== FUNZIONI DI UTILITÀ =====
-
-/**
- * Sanitizza input per prevenire SQL injection
- */
-function sanitize($input) {
-    global $conn;
-    if ($conn === null) {
-        return '';
-    }
-    return $conn->real_escape_string(trim($input));
-}
 
 /**
  * Valida email
@@ -76,7 +320,7 @@ function validatePhone($phone) {
 }
 
 /**
- * Controlla disponibilità camera con query sicura
+ * Controlla disponibilità camera con prepared statement
  */
 function isRoomAvailable($roomType, $checkIn, $checkOut) {
     global $conn;
@@ -86,23 +330,28 @@ function isRoomAvailable($roomType, $checkIn, $checkOut) {
     }
 
     try {
-        $roomType = sanitize($roomType);
-        $checkIn = sanitize($checkIn);
-        $checkOut = sanitize($checkOut);
-
-        // Query per verificare overlap di date
-        $query = "SELECT COUNT(*) as count FROM prenotazioni
-                  WHERE room_type = '$roomType'
-                  AND status = 'confirmed'
-                  AND NOT (check_out <= '$checkIn' OR check_in >= '$checkOut')";
-
-        $result = $conn->query($query);
-
-        if (!$result) {
-            throw new Exception('Errore nella query: ' . $conn->error);
+        // Validazione tipo stanza (whitelist)
+        $validRoomTypes = ['Standard', 'Deluxe', 'Suite'];
+        if (!in_array($roomType, $validRoomTypes)) {
+            return false;
         }
 
+        // Prepared statement per sicurezza
+        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM prenotazioni
+                  WHERE room_type = ?
+                  AND status IN ('confirmed', 'paid')
+                  AND NOT (check_out <= ? OR check_in >= ?)");
+
+        if (!$stmt) {
+            throw new Exception('Errore nella preparazione della query: ' . $conn->error);
+        }
+
+        $stmt->bind_param("sss", $roomType, $checkIn, $checkOut);
+        $stmt->execute();
+        $result = $stmt->get_result();
         $row = $result->fetch_assoc();
+        $stmt->close();
+
         return $row['count'] == 0;
 
     } catch (Exception $e) {
@@ -112,7 +361,7 @@ function isRoomAvailable($roomType, $checkIn, $checkOut) {
 }
 
 /**
- * Ottiene date prenotate per una camera (formato range)
+ * Ottiene date prenotate per una camera (formato range) con prepared statement
  */
 function getBookedDateRanges($roomType = null) {
     global $conn;
@@ -122,18 +371,27 @@ function getBookedDateRanges($roomType = null) {
     }
 
     try {
-        $query = "SELECT room_type, check_in, check_out FROM prenotazioni WHERE status = 'confirmed'";
-
         if ($roomType) {
-            $roomType = sanitize($roomType);
-            $query .= " AND room_type = '$roomType'";
+            // Validazione tipo stanza (whitelist)
+            $validRoomTypes = ['Standard', 'Deluxe', 'Suite'];
+            if (!in_array($roomType, $validRoomTypes)) {
+                return [];
+            }
+
+            $stmt = $conn->prepare("SELECT room_type, check_in, check_out FROM prenotazioni
+                                    WHERE status IN ('confirmed', 'paid') AND room_type = ?");
+            $stmt->bind_param("s", $roomType);
+        } else {
+            $stmt = $conn->prepare("SELECT room_type, check_in, check_out FROM prenotazioni
+                                    WHERE status IN ('confirmed', 'paid')");
         }
 
-        $result = $conn->query($query);
-
-        if (!$result) {
-            throw new Exception('Errore nella query: ' . $conn->error);
+        if (!$stmt) {
+            throw new Exception('Errore nella preparazione della query: ' . $conn->error);
         }
+
+        $stmt->execute();
+        $result = $stmt->get_result();
 
         $bookedDatesByRoom = [];
 
@@ -147,6 +405,8 @@ function getBookedDateRanges($roomType = null) {
                 'end' => $row['check_out']
             ];
         }
+
+        $stmt->close();
 
         return $bookedDatesByRoom;
 

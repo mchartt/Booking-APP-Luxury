@@ -1,0 +1,48 @@
+============================================
+    LUXURY HOTEL - GUIDA RAPIDA
+============================================
+
+PASSO 1: Installa XAMPP
+-----------------------
+Scarica da: https://www.apachefriends.org/download.html
+Installa e apri il pannello di controllo.
+
+
+PASSO 2: Avvia i servizi
+------------------------
+Nel pannello XAMPP clicca "Start" su:
+  - Apache (deve diventare verde)
+  - MySQL (deve diventare verde)
+
+
+PASSO 3: Copia i file
+---------------------
+Copia TUTTA questa cartella dentro:
+  C:\xampp\htdocs\
+
+Avrai quindi:
+  C:\xampp\htdocs\progetto-AI\
+
+
+PASSO 4: Installa il sistema
+----------------------------
+Apri il browser e vai su:
+  http://localhost/progetto-AI/install.php
+
+Segui la procedura guidata (ci vogliono 2 minuti).
+
+
+PASSO 5: Usa il sito!
+---------------------
+- Sito pubblico: http://localhost/progetto-AI/
+- Admin: http://localhost/progetto-AI/login.html
+
+
+============================================
+    FATTO!
+============================================
+
+Problemi? Controlla che:
+1. Apache e MySQL siano verdi in XAMPP
+2. I file siano in C:\xampp\htdocs\progetto-AI\
+3. Il firewall non blocchi le porte 80 e 3306

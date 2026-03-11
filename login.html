@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Login Admin - Luxury Hotel</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:wght@400;500;600&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="login-container">
+        <!-- Left Side - Branding -->
+        <div class="login-branding">
+            <div class="branding-content">
+                <div class="logo">
+                    <i class="fas fa-hotel"></i>
+                    <span>Luxury Hotel</span>
+                </div>
+                <h1>Area Amministrativa</h1>
+                <p>Gestisci prenotazioni, monitora le performance e controlla i guadagni del tuo hotel.</p>
+                <div class="features">
+                    <div class="feature">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Dashboard Analytics</span>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-calendar-check"></i>
+                        <span>Gestione Prenotazioni</span>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-euro-sign"></i>
+                        <span>Report Guadagni</span>
+                    </div>
+                </div>
+                <a href="index.html" class="back-link">
+                    <i class="fas fa-arrow-left"></i> Torna al sito
+                </a>
+            </div>
+        </div>
+
+        <!-- Right Side - Form -->
+        <div class="login-form-container">
+            <!-- Tabs -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">
+                    <i class="fas fa-sign-in-alt"></i> Accedi
+                </button>
+                <button class="auth-tab" data-tab="register">
+                    <i class="fas fa-user-plus"></i> Registrati
+                </button>
+            </div>
+
+            <!-- Alert Messages -->
+            <div id="alertBox" class="alert-box" style="display: none;">
+                <i class="alert-icon"></i>
+                <span class="alert-message"></span>
+                <button class="alert-close">&times;</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form active">
+                <h2>Bentornato!</h2>
+                <p class="form-subtitle">Accedi al pannello di amministrazione</p>
+
+                <div class="form-group">
+                    <label for="loginUsername">
+                        <i class="fas fa-user"></i> Username o Email
+                    </label>
+                    <input type="text" id="loginUsername" name="username"
+                           placeholder="Inserisci username o email" required autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <div class="password-input">
+                        <input type="password" id="loginPassword" name="password"
+                               placeholder="Inserisci la password" required autocomplete="current-password">
+                        <button type="button" class="toggle-password" data-target="loginPassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-large">
+                    <span class="btn-text">Accedi</span>
+                    <span class="btn-loader" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="registerForm" class="auth-form">
+                <h2>Crea Account</h2>
+                <p class="form-subtitle">Registrati come amministratore</p>
+
+                <div class="form-group">
+                    <label for="regUsername">
+                        <i class="fas fa-user"></i> Username
+                    </label>
+                    <input type="text" id="regUsername" name="username"
+                           placeholder="Scegli uno username" required autocomplete="username"
+                           pattern="^[a-zA-Z0-9_]{3,50}$"
+                           title="Solo lettere, numeri e underscore (3-50 caratteri)">
+                    <span class="input-hint">Solo lettere, numeri e underscore</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="regEmail">
+                        <i class="fas fa-envelope"></i> Email
+                    </label>
+                    <input type="email" id="regEmail" name="email"
+                           placeholder="email@esempio.com" required autocomplete="email">
+                    <span class="input-hint">Riceverai un link di verifica</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="regPassword">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <div class="password-input">
+                        <input type="password" id="regPassword" name="password"
+                               placeholder="Crea una password sicura" required autocomplete="new-password"
+                               minlength="8">
+                        <button type="button" class="toggle-password" data-target="regPassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="password-strength" id="passwordStrength">
+                        <div class="strength-bar"></div>
+                        <span class="strength-text"></span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="regConfirmPassword">
+                        <i class="fas fa-lock"></i> Conferma Password
+                    </label>
+                    <div class="password-input">
+                        <input type="password" id="regConfirmPassword" name="confirm_password"
+                               placeholder="Ripeti la password" required autocomplete="new-password">
+                        <button type="button" class="toggle-password" data-target="regConfirmPassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <span class="input-hint" id="passwordMatch"></span>
+                </div>
+
+                <div class="password-requirements">
+                    <p>La password deve contenere:</p>
+                    <ul>
+                        <li id="req-length"><i class="fas fa-circle"></i> Almeno 8 caratteri</li>
+                        <li id="req-upper"><i class="fas fa-circle"></i> Una lettera maiuscola</li>
+                        <li id="req-number"><i class="fas fa-circle"></i> Un numero</li>
+                    </ul>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-large">
+                    <span class="btn-text">Registrati</span>
+                    <span class="btn-loader" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+
+                <p class="form-note">
+                    <i class="fas fa-info-circle"></i>
+                    Dopo la registrazione, il tuo account dovra essere approvato da un amministratore esistente.
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <script src="login.js"></script>
+</body>
+</html>

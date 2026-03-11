@@ -1,9 +1,16 @@
 // ========== CONFIGURAZIONE ==========
-const API_BASE_URL = './api';
+const API_BASE_URL = '/api';
 
 // Variabili globali per gestire date prenotate
 let bookedDates = {};
 let selectedRoomType = null;
+
+// Prezzi e capacità per tipo di stanza
+const roomConfig = {
+    'Standard': { price: 120, maxGuests: 2 },
+    'Deluxe': { price: 180, maxGuests: 3 },
+    'Suite': { price: 280, maxGuests: 4 }
+};
 
 // ========== FUNZIONI AUSILIARIE DATE ==========
 /**
@@ -17,6 +24,7 @@ async function fetchBookedDates() {
             if (data.success && data.dates) {
                 bookedDates = data.dates;
                 updateDatePickerDisabledDates();
+                displayBookedDatesInfo();
             }
         }
     } catch (error) {
@@ -32,7 +40,6 @@ function getDisabledDatesArray() {
     const roomType = document.getElementById('roomType').value;
 
     if (roomType && bookedDates[roomType]) {
-        // bookedDates[roomType] è un array di range come [{start: '2026-03-15', end: '2026-03-18'}, ...]
         bookedDates[roomType].forEach(range => {
             const start = new Date(range.start);
             const end = new Date(range.end);
@@ -45,6 +52,32 @@ function getDisabledDatesArray() {
 }
 
 /**
+ * Mostra le date occupate nella UI
+ */
+function displayBookedDatesInfo() {
+    const roomType = document.getElementById('roomType').value;
+    const container = document.getElementById('bookedDatesInfo');
+
+    if (!container) return;
+
+    if (!roomType || !bookedDates[roomType] || bookedDates[roomType].length === 0) {
+        container.innerHTML = '<p class="no-booked"><i class="fas fa-calendar-check"></i> Tutte le date disponibili</p>';
+        return;
+    }
+
+    const datesList = bookedDates[roomType].map(range => {
+        const startDate = new Date(range.start).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+        const endDate = new Date(range.end).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+        return `<span class="booked-range"><i class="fas fa-ban"></i> ${startDate} - ${endDate}</span>`;
+    }).join('');
+
+    container.innerHTML = `
+        <p class="booked-title"><i class="fas fa-calendar-times"></i> Date occupate:</p>
+        <div class="booked-dates-list">${datesList}</div>
+    `;
+}
+
+/**
  * Aggiorna gli attributi dei date picker per disabilitare date prenotate
  */
 function updateDatePickerDisabledDates() {
@@ -52,31 +85,46 @@ function updateDatePickerDisabledDates() {
     const checkOutInput = document.getElementById('checkOut');
     const disabledDates = getDisabledDatesArray();
 
-    // Salva le date disabilitate come attributo data
     checkInInput.dataset.disabledDates = JSON.stringify(disabledDates);
     checkOutInput.dataset.disabledDates = JSON.stringify(disabledDates);
-
-    // Validazione al cambio di data
-    if (checkInInput) {
-        checkInInput.addEventListener('input', validateDateNotBooked);
-    }
-    if (checkOutInput) {
-        checkOutInput.addEventListener('input', validateDateNotBooked);
-    }
 }
 
 /**
  * Valida che la data selezionata non sia prenotata
  */
-function validateDateNotBooked(e) {
-    const disabledDates = JSON.parse(this.dataset.disabledDates || '[]');
-    const selectedDate = this.value;
+function validateDateNotBooked(input) {
+    const disabledDates = JSON.parse(input.dataset.disabledDates || '[]');
+    const selectedDate = input.value;
 
     if (selectedDate && disabledDates.includes(selectedDate)) {
         showNotification('Questa data è già prenotata. Scegli un\'altra data.', 'error');
-        this.value = '';
-        resetPriceSummary();
+        input.value = '';
+        return false;
     }
+    return true;
+}
+
+/**
+ * Verifica che il range di date non includa date prenotate
+ */
+function validateDateRange() {
+    const checkIn = document.getElementById('checkIn').value;
+    const checkOut = document.getElementById('checkOut').value;
+    const disabledDates = getDisabledDatesArray();
+
+    if (!checkIn || !checkOut) return true;
+
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        if (disabledDates.includes(dateStr)) {
+            showNotification('Il periodo selezionato include date già prenotate.', 'error');
+            return false;
+        }
+    }
+    return true;
 }
 
 // ========== GESTIONE MENU MOBILE ==========
@@ -98,25 +146,63 @@ document.querySelectorAll('.nav a').forEach(link => {
 // ========== FUNZIONI CAMERE ==========
 function selectRoom(roomType, price) {
     const roomTypeSelect = document.getElementById('roomType');
-    roomTypeSelect.value = `${roomType}`;
+    roomTypeSelect.value = roomType;
     selectedRoomType = roomType;
 
     // Scroll con effetto
     scrollToSection('booking');
-    updatePriceCalculation();
+
+    // Aggiorna il numero massimo di ospiti
+    updateGuestsOptions();
     updateDatePickerDisabledDates();
+    displayBookedDatesInfo();
+    updatePriceCalculation();
 
     // Animazione di highlights
     roomTypeSelect.style.animation = 'pulse 0.6s ease-out';
+    setTimeout(() => roomTypeSelect.style.animation = '', 600);
+}
+
+// ========== GESTIONE OSPITI ==========
+function updateGuestsOptions() {
+    const roomType = document.getElementById('roomType').value;
+    const guestsSelect = document.getElementById('guests');
+    const currentValue = guestsSelect.value;
+
+    // Massimo globale è 4, ma dipende dalla stanza
+    const maxGuests = roomConfig[roomType]?.maxGuests || 4;
+
+    // Ricostruisci le opzioni
+    guestsSelect.innerHTML = '<option value="">Seleziona</option>';
+    for (let i = 1; i <= maxGuests; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = i === 1 ? '1 ospite' : `${i} ospiti`;
+        guestsSelect.appendChild(option);
+    }
+
+    // Ripristina il valore se ancora valido
+    if (currentValue && parseInt(currentValue) <= maxGuests) {
+        guestsSelect.value = currentValue;
+    } else if (currentValue && parseInt(currentValue) > maxGuests) {
+        guestsSelect.value = maxGuests;
+        showNotification(`Il massimo di ospiti per questa stanza è ${maxGuests}`, 'warning');
+    }
+
+    updatePriceCalculation();
 }
 
 // ========== CALCOLO PREZZO ==========
 function updatePriceCalculation() {
     const checkInInput = document.getElementById('checkIn').value;
     const checkOutInput = document.getElementById('checkOut').value;
-    const roomTypeSelect = document.getElementById('roomType');
+    const roomType = document.getElementById('roomType').value;
+    const guests = document.getElementById('guests').value;
 
-    if (!checkInInput || !checkOutInput || !roomTypeSelect.value) {
+    // Aggiorna info stanza se selezionata
+    updateRoomSummary(roomType);
+
+    if (!checkInInput || !checkOutInput || !roomType) {
         resetPriceSummary();
         return;
     }
@@ -134,10 +220,8 @@ function updatePriceCalculation() {
     const timeDiff = checkOut - checkIn;
     const nights = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
-    // Estrai prezzo
-    const selectedOption = roomTypeSelect.options[roomTypeSelect.selectedIndex];
-    const priceMatch = selectedOption.text.match(/€(\d+)/);
-    const pricePerNight = priceMatch ? parseInt(priceMatch[1]) : 0;
+    // Ottieni prezzo dalla config
+    const pricePerNight = roomConfig[roomType]?.price || 0;
 
     // Calcola totale
     const totalPrice = nights * pricePerNight;
@@ -146,12 +230,53 @@ function updatePriceCalculation() {
     animateNumberChange('nightsCount', nights);
     animateNumberChange('pricePerNight', pricePerNight, '€');
     animateNumberChange('totalPrice', totalPrice, '€');
+
+    // Mostra le date formattate
+    updateDatesSummary(checkIn, checkOut);
+}
+
+function updateRoomSummary(roomType) {
+    const roomSummaryEl = document.getElementById('roomSummary');
+    if (!roomSummaryEl) return;
+
+    if (roomType && roomConfig[roomType]) {
+        roomSummaryEl.textContent = `Camera ${roomType}`;
+        roomSummaryEl.classList.add('active');
+    } else {
+        roomSummaryEl.textContent = 'Non selezionata';
+        roomSummaryEl.classList.remove('active');
+    }
+}
+
+function updateDatesSummary(checkIn, checkOut) {
+    const checkInSummary = document.getElementById('checkInSummary');
+    const checkOutSummary = document.getElementById('checkOutSummary');
+
+    if (checkInSummary && checkIn) {
+        checkInSummary.textContent = checkIn.toLocaleDateString('it-IT', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        });
+    }
+    if (checkOutSummary && checkOut) {
+        checkOutSummary.textContent = checkOut.toLocaleDateString('it-IT', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        });
+    }
 }
 
 function resetPriceSummary() {
     document.getElementById('nightsCount').textContent = '0';
     document.getElementById('pricePerNight').textContent = '€0';
     document.getElementById('totalPrice').textContent = '€0';
+
+    const checkInSummary = document.getElementById('checkInSummary');
+    const checkOutSummary = document.getElementById('checkOutSummary');
+    if (checkInSummary) checkInSummary.textContent = '-';
+    if (checkOutSummary) checkOutSummary.textContent = '-';
 }
 
 function animateNumberChange(elementId, newValue, prefix = '') {
@@ -174,19 +299,90 @@ function animateNumberChange(elementId, newValue, prefix = '') {
     }, 30);
 }
 
+// ========== GESTIONE DATE ==========
+function handleCheckInChange() {
+    const checkInInput = document.getElementById('checkIn');
+    const checkOutInput = document.getElementById('checkOut');
+
+    if (!validateDateNotBooked(checkInInput)) {
+        resetPriceSummary();
+        return;
+    }
+
+    const checkInDate = new Date(checkInInput.value);
+    const minCheckOut = new Date(checkInDate);
+    minCheckOut.setDate(minCheckOut.getDate() + 1);
+
+    // Imposta il minimo per checkout
+    checkOutInput.min = minCheckOut.toISOString().split('T')[0];
+
+    // Se checkout è prima del nuovo checkin, resettalo
+    if (checkOutInput.value && new Date(checkOutInput.value) <= checkInDate) {
+        checkOutInput.value = '';
+        showNotification('Il check-out è stato resettato. Seleziona una nuova data.', 'warning');
+    }
+
+    updatePriceCalculation();
+}
+
+function handleCheckOutChange() {
+    const checkInInput = document.getElementById('checkIn');
+    const checkOutInput = document.getElementById('checkOut');
+
+    if (!validateDateNotBooked(checkOutInput)) {
+        resetPriceSummary();
+        return;
+    }
+
+    // Validazione: checkout deve essere dopo checkin
+    if (checkInInput.value && checkOutInput.value) {
+        const checkIn = new Date(checkInInput.value);
+        const checkOut = new Date(checkOutInput.value);
+
+        if (checkOut <= checkIn) {
+            showNotification('Il check-out deve essere successivo al check-in.', 'error');
+            checkOutInput.value = '';
+            resetPriceSummary();
+            return;
+        }
+
+        // Verifica che il range non includa date prenotate
+        if (!validateDateRange()) {
+            checkOutInput.value = '';
+            resetPriceSummary();
+            return;
+        }
+    }
+
+    updatePriceCalculation();
+}
+
 // ========== EVENT LISTENERS INPUT ==========
 const checkInInput = document.getElementById('checkIn');
 const checkOutInput = document.getElementById('checkOut');
 const roomTypeSelect = document.getElementById('roomType');
+const guestsSelect = document.getElementById('guests');
 
-if (checkInInput) checkInInput.addEventListener('change', updatePriceCalculation);
-if (checkOutInput) checkOutInput.addEventListener('change', updatePriceCalculation);
+if (checkInInput) {
+    checkInInput.addEventListener('change', handleCheckInChange);
+}
+
+if (checkOutInput) {
+    checkOutInput.addEventListener('change', handleCheckOutChange);
+}
+
 if (roomTypeSelect) {
     roomTypeSelect.addEventListener('change', function() {
         selectedRoomType = this.value;
-        updatePriceCalculation();
+        updateGuestsOptions();
         updateDatePickerDisabledDates();
+        displayBookedDatesInfo();
+        updatePriceCalculation();
     });
+}
+
+if (guestsSelect) {
+    guestsSelect.addEventListener('change', updatePriceCalculation);
 }
 
 // ========== FORM PRENOTAZIONE ==========
@@ -233,6 +429,17 @@ function validateBookingForm(data) {
         return 'La data di check-out deve essere successiva al check-in';
     }
 
+    // Validazione numero ospiti
+    const maxGuests = roomConfig[data.roomType]?.maxGuests || 4;
+    if (parseInt(data.guests) > maxGuests) {
+        return `Il massimo di ospiti per la camera ${data.roomType} è ${maxGuests}`;
+    }
+
+    // Verifica date prenotate
+    if (!validateDateRange()) {
+        return 'Il periodo selezionato include date già prenotate';
+    }
+
     return null;
 }
 
@@ -259,11 +466,25 @@ async function submitBooking(formData) {
         const result = await response.json();
 
         if (result.success) {
-            // Successo: prenotazione confermata
-            showNotification(`Prenotazione confermata! ID: ${result.booking_id}. Riceverai un'email di conferma a ${formData.email}`, 'success');
-            resetFormAndUI();
-            // Ricarica le date prenotate
-            await fetchBookedDates();
+            // Calcola numero notti
+            const checkIn = new Date(formData.checkIn);
+            const checkOut = new Date(formData.checkOut);
+            const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+
+            // Salva dati per pagina pagamento
+            const bookingForPayment = {
+                ...formData,
+                booking_id: result.booking_id,
+                id: result.booking?.id,
+                nights: nights
+            };
+            sessionStorage.setItem('pendingBooking', JSON.stringify(bookingForPayment));
+
+            // Mostra notifica e redirect a pagamento
+            showNotification('Prenotazione creata! Redirect al pagamento...', 'success');
+            setTimeout(() => {
+                window.location.href = 'payment.html';
+            }, 1500);
         } else if (result.errors && Array.isArray(result.errors)) {
             // Errori di validazione dal server
             const errorList = result.errors.join('\n• ');
@@ -287,6 +508,8 @@ function resetFormAndUI() {
     setTimeout(() => {
         document.getElementById('bookingForm').reset();
         resetPriceSummary();
+        updateRoomSummary('');
+        displayBookedDatesInfo();
     }, 2000);
 }
 
@@ -312,22 +535,18 @@ if (phoneInput) {
 // ========== INIZIALIZZAZIONE DATE ==========
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
-    if (checkInInput) checkInInput.min = today;
-    if (checkOutInput) checkOutInput.min = today;
+    const checkIn = document.getElementById('checkIn');
+    const checkOut = document.getElementById('checkOut');
 
-    if (checkInInput) {
-        checkInInput.addEventListener('change', function() {
-            const checkInDate = new Date(this.value);
-            const minCheckOut = new Date(checkInDate);
-            minCheckOut.setDate(minCheckOut.getDate() + 1);
-            if (checkOutInput) {
-                checkOutInput.min = minCheckOut.toISOString().split('T')[0];
-            }
-        });
-    }
+    if (checkIn) checkIn.min = today;
+    if (checkOut) checkOut.min = today;
 
     // Carica le date prenotate
     fetchBookedDates();
+
+    // Inizializza il riepilogo
+    resetPriceSummary();
+    updateRoomSummary('');
 
     // Intersection Observer per animazioni scroll
     setupScrollAnimations();
@@ -404,4 +623,4 @@ window.addEventListener('scroll', function() {
 }, false);
 
 // ========== CARICAMENTO INIZIALE ==========
-console.log('Hotel Booking System Loaded - v2.0');
+// Sistema di prenotazione hotel inizializzato

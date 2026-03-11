@@ -110,71 +110,77 @@
             <h2>Le Nostre Stanze</h2>
             <div class="rooms-grid">
                 <div class="room-card">
-                    <div class="room-image-wrapper">
-                        <img class="room-image" src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=900&q=80" alt="Camera Standard" loading="lazy" decoding="async">
-                        <div class="room-badge">Standard</div>
-                    </div>
-                    <div class="room-info">
-                        <h3>Camera Standard</h3>
-                        <p>Perfetta per coppie o viaggi singoli</p>
-                        <div class="room-features">
-                            <span><i class="fas fa-users"></i> 2 persone</span>
-                            <span><i class="fas fa-ruler-combined"></i> 25 m²</span>
+                    <div class="room-card-inner">
+                        <div class="room-image-wrapper">
+                            <img class="room-image" src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=900&q=80" alt="Camera Standard" loading="lazy" decoding="async">
+                            <div class="room-badge">Standard</div>
                         </div>
-                        <div class="room-amenities">
-                            <span class="amenity"><i class="fas fa-wifi"></i></span>
-                            <span class="amenity"><i class="fas fa-tv"></i></span>
-                            <span class="amenity"><i class="fas fa-bath"></i></span>
+                        <div class="room-info">
+                            <h3>Camera Standard</h3>
+                            <p>Perfetta per coppie o viaggi singoli</p>
+                            <div class="room-features">
+                                <span><i class="fas fa-users"></i> 2 persone</span>
+                                <span><i class="fas fa-ruler-combined"></i> 25 m²</span>
+                            </div>
+                            <div class="room-amenities">
+                                <span class="amenity"><i class="fas fa-wifi"></i></span>
+                                <span class="amenity"><i class="fas fa-tv"></i></span>
+                                <span class="amenity"><i class="fas fa-bath"></i></span>
+                            </div>
+                            <div class="room-price">€ <span>120</span>/notte</div>
+                            <button class="btn btn-secondary" onclick="selectRoom('Standard', 120)">Seleziona</button>
                         </div>
-                        <div class="room-price">€ <span>120</span>/notte</div>
-                        <button class="btn btn-secondary" onclick="selectRoom('Standard', 120)">Seleziona</button>
-                    </div>
-                </div>
-
-                <div class="room-card">
-                    <div class="room-image-wrapper">
-                        <img class="room-image" src="https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=900&q=80" alt="Camera Deluxe" loading="lazy" decoding="async">
-                        <div class="room-badge">Deluxe</div>
-                    </div>
-                    <div class="room-info">
-                        <h3>Camera Deluxe</h3>
-                        <p>Spaziosa con vista panoramica</p>
-                        <div class="room-features">
-                            <span><i class="fas fa-users"></i> 3 persone</span>
-                            <span><i class="fas fa-ruler-combined"></i> 40 m²</span>
-                        </div>
-                        <div class="room-amenities">
-                            <span class="amenity"><i class="fas fa-wifi"></i></span>
-                            <span class="amenity"><i class="fas fa-tv"></i></span>
-                            <span class="amenity"><i class="fas fa-bath"></i></span>
-                            <span class="amenity"><i class="fas fa-sun"></i></span>
-                        </div>
-                        <div class="room-price">€ <span>180</span>/notte</div>
-                        <button class="btn btn-secondary" onclick="selectRoom('Deluxe', 180)">Seleziona</button>
                     </div>
                 </div>
 
                 <div class="room-card">
-                    <div class="room-image-wrapper">
-                        <img class="room-image" src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=900&q=80" alt="Suite Lussuosa" loading="lazy" decoding="async">
-                        <div class="room-badge premium">Lussuosa</div>
+                    <div class="room-card-inner">
+                        <div class="room-image-wrapper">
+                            <img class="room-image" src="https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=900&q=80" alt="Camera Deluxe" loading="lazy" decoding="async">
+                            <div class="room-badge">Deluxe</div>
+                        </div>
+                        <div class="room-info">
+                            <h3>Camera Deluxe</h3>
+                            <p>Spaziosa con vista panoramica</p>
+                            <div class="room-features">
+                                <span><i class="fas fa-users"></i> 3 persone</span>
+                                <span><i class="fas fa-ruler-combined"></i> 40 m²</span>
+                            </div>
+                            <div class="room-amenities">
+                                <span class="amenity"><i class="fas fa-wifi"></i></span>
+                                <span class="amenity"><i class="fas fa-tv"></i></span>
+                                <span class="amenity"><i class="fas fa-bath"></i></span>
+                                <span class="amenity"><i class="fas fa-sun"></i></span>
+                            </div>
+                            <div class="room-price">€ <span>180</span>/notte</div>
+                            <button class="btn btn-secondary" onclick="selectRoom('Deluxe', 180)">Seleziona</button>
+                        </div>
                     </div>
-                    <div class="room-info">
-                        <h3>Suite Lussuosa</h3>
-                        <p>Lussuosa con jacuzzi privata</p>
-                        <div class="room-features">
-                            <span><i class="fas fa-users"></i> 4 persone</span>
-                            <span><i class="fas fa-ruler-combined"></i> 60 m²</span>
+                </div>
+
+                <div class="room-card">
+                    <div class="room-card-inner">
+                        <div class="room-image-wrapper">
+                            <img class="room-image" src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=900&q=80" alt="Suite Lussuosa" loading="lazy" decoding="async">
+                            <div class="room-badge premium">Lussuosa</div>
                         </div>
-                        <div class="room-amenities">
-                            <span class="amenity"><i class="fas fa-wifi"></i></span>
-                            <span class="amenity"><i class="fas fa-tv"></i></span>
-                            <span class="amenity"><i class="fas fa-bath"></i></span>
-                            <span class="amenity"><i class="fas fa-hot-tub"></i></span>
-                            <span class="amenity"><i class="fas fa-sun"></i></span>
+                        <div class="room-info">
+                            <h3>Suite Lussuosa</h3>
+                            <p>Lussuosa con jacuzzi privata</p>
+                            <div class="room-features">
+                                <span><i class="fas fa-users"></i> 4 persone</span>
+                                <span><i class="fas fa-ruler-combined"></i> 60 m²</span>
+                            </div>
+                            <div class="room-amenities">
+                                <span class="amenity"><i class="fas fa-wifi"></i></span>
+                                <span class="amenity"><i class="fas fa-tv"></i></span>
+                                <span class="amenity"><i class="fas fa-bath"></i></span>
+                                <span class="amenity"><i class="fas fa-hot-tub"></i></span>
+                                <span class="amenity"><i class="fas fa-sun"></i></span>
+                            </div>
+                            <div class="room-price">€ <span>280</span>/notte</div>
+                            <button class="btn btn-secondary" onclick="selectRoom('Suite', 280)">Seleziona</button>
                         </div>
-                        <div class="room-price">€ <span>280</span>/notte</div>
-                        <button class="btn btn-secondary" onclick="selectRoom('Suite', 280)">Seleziona</button>
                     </div>
                 </div>
             </div>
@@ -188,24 +194,26 @@
             <div class="booking-container">
                 <form id="bookingForm" class="booking-form">
                     <div class="form-row">
-                        <div class="form-group">
-                            <label for="roomType">Tipo di Stanza *</label>
+                        <div class="form-group floating">
                             <select id="roomType" required>
-                                <option value="">Seleziona una stanza</option>
+                                <option value=""></option>
                                 <option value="Standard">Standard - €120/notte (max 2 ospiti)</option>
                                 <option value="Deluxe">Deluxe - €180/notte (max 3 ospiti)</option>
                                 <option value="Suite">Suite - €280/notte (max 4 ospiti)</option>
                             </select>
+                            <label for="roomType">Tipo di Stanza</label>
+                            <span class="focus-line"></span>
                         </div>
-                        <div class="form-group">
-                            <label for="guests">Numero Ospiti *</label>
+                        <div class="form-group floating">
                             <select id="guests" required>
-                                <option value="">Seleziona</option>
+                                <option value=""></option>
                                 <option value="1">1 ospite</option>
                                 <option value="2">2 ospiti</option>
                                 <option value="3">3 ospiti</option>
                                 <option value="4">4 ospiti</option>
                             </select>
+                            <label for="guests">Numero Ospiti</label>
+                            <span class="focus-line"></span>
                         </div>
                     </div>
 
@@ -215,38 +223,44 @@
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group">
-                            <label for="checkIn">Check-in *</label>
+                        <div class="form-group floating">
                             <input type="date" id="checkIn" required>
+                            <label for="checkIn">Check-in</label>
+                            <span class="focus-line"></span>
                         </div>
-                        <div class="form-group">
-                            <label for="checkOut">Check-out *</label>
+                        <div class="form-group floating">
                             <input type="date" id="checkOut" required>
+                            <label for="checkOut">Check-out</label>
+                            <span class="focus-line"></span>
                         </div>
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group full">
-                            <label for="name">Nome Completo *</label>
-                            <input type="text" id="name" placeholder="Mario Rossi" required>
+                        <div class="form-group floating full">
+                            <input type="text" id="name" placeholder=" " required>
+                            <label for="name">Nome Completo</label>
+                            <span class="focus-line"></span>
                         </div>
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group">
-                            <label for="email">Email *</label>
-                            <input type="email" id="email" placeholder="mario@example.com" required>
+                        <div class="form-group floating">
+                            <input type="email" id="email" placeholder=" " required>
+                            <label for="email">Email</label>
+                            <span class="focus-line"></span>
                         </div>
-                        <div class="form-group">
-                            <label for="phone">Telefono *</label>
-                            <input type="tel" id="phone" placeholder="+39 123 456 7890" required>
+                        <div class="form-group floating">
+                            <input type="tel" id="phone" placeholder=" " required>
+                            <label for="phone">Telefono</label>
+                            <span class="focus-line"></span>
                         </div>
                     </div>
 
                     <div class="form-row">
-                        <div class="form-group full">
+                        <div class="form-group floating full">
+                            <textarea id="requests" placeholder=" " rows="3"></textarea>
                             <label for="requests">Richieste Speciali</label>
-                            <textarea id="requests" placeholder="Es. letto matrimoniale, camera silenziosa..." rows="3"></textarea>
+                            <span class="focus-line"></span>
                         </div>
                     </div>
 
@@ -308,37 +322,49 @@
             <h2>Cosa Dicono i Nostri Ospiti</h2>
             <div class="reviews-grid">
                 <div class="review-card">
-                    <div class="stars">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
+                    <div class="review-card-inner">
+                        <div class="stars">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="review-text-content">
+                            <p>"Una struttura meravigliosa, staff cortese e servizio eccellente!"</p>
+                            <strong>Giovanni M.</strong>
+                        </div>
                     </div>
-                    <p>"Una struttura meravigliosa, staff cortese e servizio eccellente!"</p>
-                    <strong>Giovanni M.</strong>
                 </div>
                 <div class="review-card">
-                    <div class="stars">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
+                    <div class="review-card-inner">
+                        <div class="stars">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="review-text-content">
+                            <p>"Perfetto per una fuga romantica. Consigliatissimo!"</p>
+                            <strong>Laura G.</strong>
+                        </div>
                     </div>
-                    <p>"Perfetto per una fuga romantica. Consigliatissimo!"</p>
-                    <strong>Laura G.</strong>
                 </div>
                 <div class="review-card">
-                    <div class="stars">
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i>
+                    <div class="review-card-inner">
+                        <div class="stars">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="review-text-content">
+                            <p>"Ambiente lussuoso e tranquillo. Tornerò sicuramente!"</p>
+                            <strong>Marco T.</strong>
+                        </div>
                     </div>
-                    <p>"Ambiente lussuoso e tranquillo. Tornerò sicuramente!"</p>
-                    <strong>Marco T.</strong>
                 </div>
             </div>
         </div>

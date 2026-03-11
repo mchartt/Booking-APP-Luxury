@@ -10,6 +10,35 @@
 // Determina ambiente (localhost vs produzione)
 $isLocalhost = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:8080', '127.0.0.1:8080']);
 
+// ===== GENERAZIONE NONCE CSP =====
+// Genera un token crittografico univoco per ogni richiesta
+// Questo previene attacchi XSS bloccando script inline non autorizzati
+
+/**
+ * Genera e restituisce il nonce CSP per la richiesta corrente
+ * Il nonce è generato una sola volta per richiesta e riutilizzato
+ *
+ * @return string Il nonce in formato base64
+ */
+function getCspNonce() {
+    static $nonce = null;
+
+    if ($nonce === null) {
+        // Genera 16 byte casuali crittograficamente sicuri
+        $nonce = base64_encode(random_bytes(16));
+    }
+
+    return $nonce;
+}
+
+// Genera il nonce all'avvio per renderlo disponibile ovunque
+$CSP_NONCE = getCspNonce();
+
+// Definisce come costante per accesso globale (utile per template PHP)
+if (!defined('CSP_NONCE')) {
+    define('CSP_NONCE', $CSP_NONCE);
+}
+
 // ===== INIZIALIZZAZIONE SESSIONE SICURA =====
 // Centralizzata qui per evitare duplicazioni e garantire consistenza
 
@@ -62,11 +91,13 @@ if (!$isLocalhost) {
     header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
 }
 
-// Content Security Policy
-// NOTA: Configura in base alle risorse usate dal sito
+// ===== CONTENT SECURITY POLICY CON NONCE =====
+// Usa nonce invece di 'unsafe-inline' per maggiore sicurezza
+// Gli script inline sono permessi SOLO se hanno l'attributo nonce corretto
+
 $csp = "default-src 'self'; " .
-       "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " .
-       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " .
+       "script-src 'self' 'nonce-{$CSP_NONCE}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " .
+       "style-src 'self' 'nonce-{$CSP_NONCE}' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " .
        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " .
        "img-src 'self' data: https:; " .
        "connect-src 'self'; " .
@@ -118,4 +149,38 @@ setCorsHeaders();
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
+}
+
+/**
+ * Helper per generare tag script con nonce
+ * Uso: echo scriptTag('console.log("Hello");');
+ *
+ * @param string $code Il codice JavaScript
+ * @return string Tag script completo con nonce
+ */
+function scriptTag($code) {
+    $nonce = CSP_NONCE;
+    return "<script nonce=\"{$nonce}\">{$code}</script>";
+}
+
+/**
+ * Helper per generare tag style con nonce
+ * Uso: echo styleTag('body { color: red; }');
+ *
+ * @param string $css Il codice CSS
+ * @return string Tag style completo con nonce
+ */
+function styleTag($css) {
+    $nonce = CSP_NONCE;
+    return "<style nonce=\"{$nonce}\">{$css}</style>";
+}
+
+/**
+ * Ritorna solo il valore del nonce (per uso in template)
+ * Uso in HTML: <script nonce="<?= getNonce() ?>">...</script>
+ *
+ * @return string Il nonce
+ */
+function getNonce() {
+    return CSP_NONCE;
 }

@@ -312,24 +312,42 @@ function columnExists($conn, $table, $column) {
 // ===== FUNZIONI DI UTILITÀ =====
 
 /**
- * Ottiene l'IP reale del client in modo sicuro
- * Gestisce correttamente proxy, load balancer e CDN (es. Cloudflare)
+ * Ottiene l'IP reale del client in modo sicuro con logica Trusted Proxies
  *
- * SICUREZZA: Valida sempre che gli header contengano IP validi
- * per prevenire IP spoofing malevolo.
+ * SICUREZZA: Gli header proxy (X-Forwarded-For, etc.) possono essere falsificati
+ * da qualsiasi client. Questa funzione li usa SOLO se la connessione proviene
+ * da un proxy fidato (configurato in TRUSTED_PROXIES).
  *
  * @return string L'IP del client (IPv4 o IPv6)
  */
 function getClientIp() {
-    // Lista di header da controllare in ordine di priorità
-    // NOTA: In produzione con proxy fidato, considera di limitare
-    // questa lista solo agli header che il tuo proxy effettivamente usa
+    // IP della connessione diretta (non falsificabile)
+    $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+    // Carica lista proxy fidati da variabile d'ambiente
+    // Formato: lista separata da virgole (es: "127.0.0.1,10.0.0.1,173.245.48.0/20")
+    $trustedProxiesEnv = $_ENV['TRUSTED_PROXIES'] ?? getenv('TRUSTED_PROXIES') ?: '';
+
+    // Se non ci sono proxy fidati configurati, usa sempre REMOTE_ADDR (più sicuro)
+    if (empty($trustedProxiesEnv)) {
+        return $remoteAddr;
+    }
+
+    // Parsa la lista di proxy fidati
+    $trustedProxies = array_map('trim', explode(',', $trustedProxiesEnv));
+
+    // Verifica se REMOTE_ADDR è un proxy fidato
+    if (!isIpInTrustedList($remoteAddr, $trustedProxies)) {
+        // La connessione NON proviene da un proxy fidato
+        // NON fidarsi degli header proxy - potrebbero essere falsificati
+        return $remoteAddr;
+    }
+
+    // La connessione proviene da un proxy fidato - ora possiamo leggere gli header
     $headersToCheck = [
         'HTTP_CF_CONNECTING_IP',     // Cloudflare
         'HTTP_X_FORWARDED_FOR',      // Standard proxy header
         'HTTP_X_REAL_IP',            // Nginx proxy
-        'HTTP_X_CLIENT_IP',          // Alcuni proxy
-        'HTTP_CLIENT_IP',            // Alcuni proxy
     ];
 
     foreach ($headersToCheck as $header) {
@@ -340,21 +358,98 @@ function getClientIp() {
             $ip = trim($ipList[0]);
 
             // Valida che sia un IP valido (IPv4 o IPv6)
-            // Questo previene injection di valori malevoli nell'header
-            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                return $ip;
-            }
-
-            // Se l'IP è privato/riservato, potrebbe essere legittimo in alcune configurazioni
-            // (es. proxy interni). Accettalo come fallback se è comunque un IP valido.
             if (filter_var($ip, FILTER_VALIDATE_IP)) {
                 return $ip;
             }
         }
     }
 
-    // Fallback a REMOTE_ADDR (sempre presente)
-    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    // Fallback a REMOTE_ADDR
+    return $remoteAddr;
+}
+
+/**
+ * Verifica se un IP appartiene alla lista di proxy fidati
+ * Supporta sia IP singoli che notazione CIDR (es: 173.245.48.0/20)
+ *
+ * @param string $ip L'IP da verificare
+ * @param array $trustedList Lista di IP/CIDR fidati
+ * @return bool True se l'IP è nella lista fidati
+ */
+function isIpInTrustedList($ip, $trustedList) {
+    foreach ($trustedList as $trusted) {
+        $trusted = trim($trusted);
+
+        if (empty($trusted)) {
+            continue;
+        }
+
+        // Verifica se è una notazione CIDR
+        if (strpos($trusted, '/') !== false) {
+            if (ipInCidr($ip, $trusted)) {
+                return true;
+            }
+        } else {
+            // Confronto diretto IP
+            if ($ip === $trusted) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Verifica se un IP appartiene a un range CIDR
+ *
+ * @param string $ip L'IP da verificare
+ * @param string $cidr Il range CIDR (es: 173.245.48.0/20)
+ * @return bool True se l'IP è nel range
+ */
+function ipInCidr($ip, $cidr) {
+    list($subnet, $bits) = explode('/', $cidr);
+
+    // IPv4
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) &&
+        filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+
+        $ipLong = ip2long($ip);
+        $subnetLong = ip2long($subnet);
+        $mask = -1 << (32 - (int)$bits);
+
+        return ($ipLong & $mask) === ($subnetLong & $mask);
+    }
+
+    // IPv6
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) &&
+        filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+
+        $ipBin = inet_pton($ip);
+        $subnetBin = inet_pton($subnet);
+        $bits = (int)$bits;
+
+        // Confronta bit per bit
+        $fullBytes = intdiv($bits, 8);
+        $remainingBits = $bits % 8;
+
+        // Confronta i byte completi
+        if (substr($ipBin, 0, $fullBytes) !== substr($subnetBin, 0, $fullBytes)) {
+            return false;
+        }
+
+        // Confronta i bit rimanenti se presenti
+        if ($remainingBits > 0 && $fullBytes < 16) {
+            $mask = 0xFF << (8 - $remainingBits);
+            if ((ord($ipBin[$fullBytes]) & $mask) !== (ord($subnetBin[$fullBytes]) & $mask)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 /**

@@ -609,61 +609,148 @@ function updateBookingPaymentStatus($bookingId, $status, $method, $transactionId
 // ===== WEBHOOK HANDLER (per integrazioni future) =====
 
 /**
+ * Valida la firma HMAC del webhook
+ *
+ * @param string $payload Il payload raw della richiesta
+ * @param string $signature La firma ricevuta nell'header
+ * @param string $secret Il segreto condiviso con il provider
+ * @return bool True se la firma è valida
+ */
+function validateWebhookSignature($payload, $signature, $secret) {
+    if (empty($signature) || empty($secret)) {
+        return false;
+    }
+
+    // Calcola l'HMAC-SHA256 del payload
+    $expectedSignature = hash_hmac('sha256', $payload, $secret);
+
+    // Confronto timing-safe per prevenire timing attacks
+    return hash_equals($expectedSignature, $signature);
+}
+
+/**
  * Gestisce webhook da payment provider
  * Da chiamare con endpoint separato o action=webhook
+ *
+ * SICUREZZA: Richiede validazione HMAC-SHA256 obbligatoria.
+ * Il webhook viene processato SOLO se la firma crittografica è valida.
  */
 function handleWebhook() {
-    // Verifica firma webhook (provider-specific)
-    $signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ?? '';
+    global $conn;
+
+    // Leggi il payload raw PRIMA di qualsiasi parsing
     $payload = file_get_contents('php://input');
 
-    // In produzione: verificare la firma con la chiave segreta del provider
+    // Ottieni la firma dall'header (supporta diversi formati comuni)
+    $signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ??
+                 $_SERVER['HTTP_X_SIGNATURE'] ??
+                 $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
 
+    // Alcuni provider inviano la firma con prefisso (es: "sha256=...")
+    if (strpos($signature, 'sha256=') === 0) {
+        $signature = substr($signature, 7);
+    }
+
+    // Carica il segreto webhook dalla configurazione
+    $webhookSecret = $_ENV['WEBHOOK_SECRET'] ?? getenv('WEBHOOK_SECRET') ?: '';
+
+    // SICUREZZA: Rifiuta webhook se il segreto non è configurato
+    if (empty($webhookSecret)) {
+        error_log('Webhook Error: WEBHOOK_SECRET non configurato nel file .env');
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Webhook endpoint not configured'
+        ]);
+        return;
+    }
+
+    // SICUREZZA: Rifiuta webhook senza firma
+    if (empty($signature)) {
+        error_log('Webhook Error: Firma mancante - possibile tentativo di spoofing da IP: ' . getClientIp());
+        http_response_code(401);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Missing webhook signature'
+        ]);
+        return;
+    }
+
+    // SICUREZZA: Valida la firma HMAC-SHA256
+    if (!validateWebhookSignature($payload, $signature, $webhookSecret)) {
+        error_log('Webhook Error: Firma non valida - possibile tentativo di frode da IP: ' . getClientIp());
+        http_response_code(401);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Invalid webhook signature'
+        ]);
+        return;
+    }
+
+    // La firma è valida - ora possiamo processare il payload
     $data = json_decode($payload, true);
 
     if (!$data || empty($data['event'])) {
         http_response_code(400);
-        echo json_encode(['error' => 'Invalid webhook payload']);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Invalid webhook payload'
+        ]);
         return;
     }
 
-    switch ($data['event']) {
-        case 'payment.completed':
-            // Aggiorna stato pagamento
-            if (!empty($data['booking_id'])) {
-                updateBookingPaymentStatus(
-                    $data['booking_id'],
-                    'completed',
-                    $data['method'] ?? 'unknown',
-                    $data['transaction_id'] ?? ''
-                );
-            }
-            break;
+    // Log dell'evento webhook ricevuto (per audit)
+    error_log('Webhook ricevuto: ' . $data['event'] . ' - booking_id: ' . ($data['booking_id'] ?? 'N/A'));
 
-        case 'payment.failed':
-            if (!empty($data['booking_id'])) {
-                updateBookingPaymentStatus(
-                    $data['booking_id'],
-                    'failed',
-                    $data['method'] ?? 'unknown',
-                    $data['transaction_id'] ?? ''
-                );
-            }
-            break;
+    try {
+        switch ($data['event']) {
+            case 'payment.completed':
+                if (!empty($data['booking_id'])) {
+                    updateBookingPaymentStatus(
+                        $data['booking_id'],
+                        'completed',
+                        $data['method'] ?? 'unknown',
+                        $data['transaction_id'] ?? ''
+                    );
+                }
+                break;
 
-        case 'payment.refunded':
-            if (!empty($data['booking_id'])) {
-                updateBookingPaymentStatus(
-                    $data['booking_id'],
-                    'refunded',
-                    $data['method'] ?? 'unknown',
-                    $data['transaction_id'] ?? ''
-                );
-            }
-            break;
+            case 'payment.failed':
+                if (!empty($data['booking_id'])) {
+                    updateBookingPaymentStatus(
+                        $data['booking_id'],
+                        'failed',
+                        $data['method'] ?? 'unknown',
+                        $data['transaction_id'] ?? ''
+                    );
+                }
+                break;
+
+            case 'payment.refunded':
+                if (!empty($data['booking_id'])) {
+                    updateBookingPaymentStatus(
+                        $data['booking_id'],
+                        'refunded',
+                        $data['method'] ?? 'unknown',
+                        $data['transaction_id'] ?? ''
+                    );
+                }
+                break;
+
+            default:
+                error_log('Webhook: evento non gestito: ' . $data['event']);
+        }
+
+        http_response_code(200);
+        echo json_encode(['received' => true]);
+
+    } catch (Exception $e) {
+        error_log('Webhook Processing Error: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Error processing webhook'
+        ]);
     }
-
-    http_response_code(200);
-    echo json_encode(['received' => true]);
 }
 ?>

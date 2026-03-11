@@ -50,6 +50,117 @@ function validateCsrfToken() {
     }
 }
 
+// ===== RATE LIMITING PER PRENOTAZIONI =====
+
+/**
+ * Configurazione rate limiting prenotazioni
+ * Previene attacchi di inventory blocking (prenotazioni false per bloccare disponibilità)
+ */
+define('BOOKING_RATE_LIMIT_WINDOW', 600);  // Finestra temporale in secondi (10 minuti)
+define('BOOKING_RATE_LIMIT_MAX', 3);       // Max prenotazioni per finestra
+
+/**
+ * Verifica e applica rate limiting per la creazione di prenotazioni
+ *
+ * @param string $ip L'IP del client
+ * @return array ['allowed' => bool, 'remaining' => int, 'retry_after' => int]
+ */
+function checkBookingRateLimit($ip) {
+    global $conn;
+
+    if ($conn === null) {
+        // Se DB non disponibile, permetti (fail-open per non bloccare il servizio)
+        return ['allowed' => true, 'remaining' => BOOKING_RATE_LIMIT_MAX, 'retry_after' => 0];
+    }
+
+    try {
+        // Crea tabella rate limiting se non esiste
+        $conn->query("CREATE TABLE IF NOT EXISTS booking_rate_limits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ip_address VARCHAR(45) NOT NULL,
+            attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_ip_time (ip_address, attempted_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Pulisci tentativi vecchi (più di 1 ora)
+        $conn->query("DELETE FROM booking_rate_limits WHERE attempted_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+
+        // Conta tentativi recenti da questo IP
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) as count, MIN(attempted_at) as first_attempt
+             FROM booking_rate_limits
+             WHERE ip_address = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL ? SECOND)"
+        );
+        $window = BOOKING_RATE_LIMIT_WINDOW;
+        $stmt->bind_param("si", $ip, $window);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $attemptCount = (int)$row['count'];
+        $firstAttempt = $row['first_attempt'];
+        $stmt->close();
+
+        // Verifica se limite superato
+        if ($attemptCount >= BOOKING_RATE_LIMIT_MAX) {
+            // Calcola quando potrà riprovare
+            $firstAttemptTime = strtotime($firstAttempt);
+            $retryAfter = ($firstAttemptTime + BOOKING_RATE_LIMIT_WINDOW) - time();
+            $retryAfter = max(0, $retryAfter);
+
+            return [
+                'allowed' => false,
+                'remaining' => 0,
+                'retry_after' => $retryAfter,
+                'message' => "Hai raggiunto il limite di prenotazioni. Riprova tra " . ceil($retryAfter / 60) . " minuti."
+            ];
+        }
+
+        // Registra questo tentativo
+        $stmt = $conn->prepare("INSERT INTO booking_rate_limits (ip_address, attempted_at) VALUES (?, NOW())");
+        $stmt->bind_param("s", $ip);
+        $stmt->execute();
+        $stmt->close();
+
+        return [
+            'allowed' => true,
+            'remaining' => BOOKING_RATE_LIMIT_MAX - $attemptCount - 1,
+            'retry_after' => 0
+        ];
+
+    } catch (Exception $e) {
+        error_log('BookingRateLimit Error: ' . $e->getMessage());
+        // Fail-open: permetti in caso di errore per non bloccare il servizio
+        return ['allowed' => true, 'remaining' => BOOKING_RATE_LIMIT_MAX, 'retry_after' => 0];
+    }
+}
+
+/**
+ * Rimuove un tentativo dal rate limit (da chiamare se la prenotazione fallisce per altri motivi)
+ * Questo evita di penalizzare l'utente per errori non legati a spam
+ *
+ * @param string $ip L'IP del client
+ */
+function rollbackBookingRateLimit($ip) {
+    global $conn;
+
+    if ($conn === null) return;
+
+    try {
+        // Rimuovi l'ultimo tentativo di questo IP
+        $stmt = $conn->prepare(
+            "DELETE FROM booking_rate_limits
+             WHERE ip_address = ?
+             ORDER BY attempted_at DESC
+             LIMIT 1"
+        );
+        $stmt->bind_param("s", $ip);
+        $stmt->execute();
+        $stmt->close();
+    } catch (Exception $e) {
+        error_log('RollbackBookingRateLimit Error: ' . $e->getMessage());
+    }
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? null;
 
@@ -195,14 +306,34 @@ function checkAvailability() {
 
 /**
  * Crea nuova prenotazione (con prepared statements per sicurezza)
+ * Include rate limiting per prevenire attacchi di inventory blocking
  */
 function createBooking() {
     global $conn;
+
+    // ===== RATE LIMITING =====
+    // Previene attacchi di inventory blocking (troppe prenotazioni false)
+    $clientIp = getClientIp();
+    $rateCheck = checkBookingRateLimit($clientIp);
+
+    if (!$rateCheck['allowed']) {
+        error_log("Booking rate limit exceeded for IP: {$clientIp}");
+        http_response_code(429);
+        echo json_encode([
+            'success' => false,
+            'message' => $rateCheck['message'],
+            'retry_after' => $rateCheck['retry_after'],
+            'code' => 'RATE_LIMIT_EXCEEDED'
+        ]);
+        return;
+    }
 
     try {
         $input = json_decode(file_get_contents('php://input'), true);
 
         if (!$input) {
+            // Rollback rate limit per errore di parsing (non è spam)
+            rollbackBookingRateLimit($clientIp);
             throw new Exception('Request JSON non valido');
         }
 
@@ -215,11 +346,14 @@ function createBooking() {
         $validation = validateBooking($input);
 
         if (!$validation['valid']) {
+            // NON fare rollback qui - errori di validazione potrebbero essere tentativi di spam
+            // (es. date invalide ripetute per bloccare inventario)
             http_response_code(400);
             echo json_encode([
                 'success' => false,
                 'errors' => $validation['errors'],
-                'message' => 'Errori nella validazione dei dati'
+                'message' => 'Errori nella validazione dei dati',
+                'rate_limit_remaining' => $rateCheck['remaining']
             ]);
             return;
         }
@@ -240,7 +374,8 @@ function createBooking() {
             http_response_code(400);
             echo json_encode([
                 'success' => false,
-                'message' => 'Tipo di stanza non valido'
+                'message' => 'Tipo di stanza non valido',
+                'rate_limit_remaining' => $rateCheck['remaining']
             ]);
             return;
         }

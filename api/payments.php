@@ -4,7 +4,7 @@
  * Gestisce transazioni, validazione e aggiornamento stato prenotazioni
  */
 
-// Security headers centralizzati
+// Security headers e sessione centralizzati
 require_once __DIR__ . '/security_headers.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -13,19 +13,7 @@ require_once '../config.php';
 
 // ===== SESSION TIMEOUT & RATE LIMITING =====
 
-// Secure session cookie settings
-$isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path' => '/',
-    'domain' => '',
-    'secure' => $isSecure,
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-
 // Session timeout lato server (15 minuti)
-session_start();
 define('SESSION_TIMEOUT', 900); // 15 minuti in secondi
 
 if (isset($_SESSION['last_activity'])) {
@@ -44,8 +32,8 @@ if (isset($_SESSION['last_activity'])) {
 }
 $_SESSION['last_activity'] = time();
 
-// Rate limiting basato su IP (usa database per persistenza)
-$clientIp = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+// Rate limiting basato su IP reale (gestisce proxy/CDN)
+$clientIp = getClientIp();
 $rateLimitWindow = 60; // secondi
 $maxRequests = 30; // max richieste per finestra
 

@@ -612,7 +612,7 @@ function handleUserAction(e) {
     const userId = parseInt(btn.dataset.userid);
 
     if (!userId || userId <= 0) {
-        console.warn('ID utente non valido');
+        if (DEBUG) console.warn('ID utente non valido');
         return;
     }
 
@@ -1181,7 +1181,7 @@ async function loadPendingUsersCount() {
             }
         }
     } catch (error) {
-        console.error('Error loading pending users count:', error);
+        if (DEBUG) console.error('Error loading pending users count:', error);
     }
 }
 
@@ -1233,7 +1233,7 @@ async function loadPendingUsers() {
             `}).join('');
         }
     } catch (error) {
-        console.error('Error loading pending users:', error);
+        if (DEBUG) console.error('Error loading pending users:', error);
         tbody.innerHTML = `<tr><td colspan="4" class="loading-row">Errore nel caricamento</td></tr>`;
     }
 }
@@ -1262,7 +1262,7 @@ async function approveUser(userId) {
             showNotification(data.message || 'Errore nell\'approvazione', 'error');
         }
     } catch (error) {
-        console.error('Approve error:', error);
+        if (DEBUG) console.error('Approve error:', error);
         showNotification('Errore di connessione', 'error');
     }
 }
@@ -1291,7 +1291,7 @@ async function rejectUser(userId) {
             showNotification(data.message || 'Errore nel rifiuto', 'error');
         }
     } catch (error) {
-        console.error('Reject error:', error);
+        if (DEBUG) console.error('Reject error:', error);
         showNotification('Errore di connessione', 'error');
     }
 }

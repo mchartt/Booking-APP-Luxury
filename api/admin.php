@@ -5,20 +5,7 @@
  * PROTETTO DA AUTENTICAZIONE
  */
 
-// Secure session cookie settings
-$isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path' => '/',
-    'domain' => '',
-    'secure' => $isSecure,
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-
-session_start();
-
-// Security headers centralizzati
+// Security headers e sessione centralizzati
 require_once __DIR__ . '/security_headers.php';
 
 header('Content-Type: application/json; charset=utf-8');

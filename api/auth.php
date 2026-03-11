@@ -4,20 +4,7 @@
  * Gestisce login, registrazione, verifica email, logout
  */
 
-// Secure session cookie settings (before session_start)
-$isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path' => '/',
-    'domain' => '',
-    'secure' => $isSecure,
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-
-session_start();
-
-// Security headers centralizzati
+// Security headers e sessione centralizzati
 require_once __DIR__ . '/security_headers.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -322,23 +309,44 @@ function verifyEmail() {
         exit;
     }
 
-    // Conta admin attivi
-    $result = $conn->query("SELECT COUNT(*) as count FROM admin_users WHERE status = 'active'");
-    $activeCount = $result->fetch_assoc()['count'];
+    // ===== PROTEZIONE RACE CONDITION (TOCTOU) =====
+    // Usa transazione con locking per prevenire che due utenti vengano
+    // promossi ad admin contemporaneamente quando count == 0
+    $conn->begin_transaction();
 
-    // Se e il primo utente, approvalo automaticamente
-    $newStatus = ($activeCount == 0) ? 'active' : 'pending';
+    try {
+        // Lock esclusivo sulla tabella admin_users per questa operazione
+        // FOR UPDATE blocca le righe lette fino al commit della transazione
+        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM admin_users WHERE status = 'active' FOR UPDATE");
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $activeCount = $result->fetch_assoc()['count'];
+        $stmt->close();
 
-    // Aggiorna utente
-    $stmt = $conn->prepare("UPDATE admin_users SET
-        email_verified = TRUE,
-        verification_token = NULL,
-        token_expires_at = NULL,
-        status = ?
-        WHERE id = ?");
-    $stmt->bind_param("si", $newStatus, $user['id']);
-    $stmt->execute();
-    $stmt->close();
+        // Se è il primo utente, approvalo automaticamente
+        $newStatus = ($activeCount == 0) ? 'active' : 'pending';
+
+        // Aggiorna utente (all'interno della stessa transazione)
+        $stmt = $conn->prepare("UPDATE admin_users SET
+            email_verified = TRUE,
+            verification_token = NULL,
+            token_expires_at = NULL,
+            status = ?
+            WHERE id = ?");
+        $stmt->bind_param("si", $newStatus, $user['id']);
+        $stmt->execute();
+        $stmt->close();
+
+        // Commit della transazione - rilascia i lock
+        $conn->commit();
+
+    } catch (Exception $e) {
+        // Rollback in caso di errore
+        $conn->rollback();
+        error_log('verifyEmail transaction error: ' . $e->getMessage());
+        header('Location: ../login.html?error=verification_failed');
+        exit;
+    }
 
     // Redirect a login con messaggio appropriato
     if ($newStatus === 'active') {
@@ -355,7 +363,7 @@ function login($input) {
 
     $username = trim($input['username'] ?? '');
     $password = $input['password'] ?? '';
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $ip = getClientIp(); // Usa helper per gestire proxy/CDN
 
     // Verifica rate limiting
     if (isLockedOut($ip)) {

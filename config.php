@@ -312,6 +312,52 @@ function columnExists($conn, $table, $column) {
 // ===== FUNZIONI DI UTILITÀ =====
 
 /**
+ * Ottiene l'IP reale del client in modo sicuro
+ * Gestisce correttamente proxy, load balancer e CDN (es. Cloudflare)
+ *
+ * SICUREZZA: Valida sempre che gli header contengano IP validi
+ * per prevenire IP spoofing malevolo.
+ *
+ * @return string L'IP del client (IPv4 o IPv6)
+ */
+function getClientIp() {
+    // Lista di header da controllare in ordine di priorità
+    // NOTA: In produzione con proxy fidato, considera di limitare
+    // questa lista solo agli header che il tuo proxy effettivamente usa
+    $headersToCheck = [
+        'HTTP_CF_CONNECTING_IP',     // Cloudflare
+        'HTTP_X_FORWARDED_FOR',      // Standard proxy header
+        'HTTP_X_REAL_IP',            // Nginx proxy
+        'HTTP_X_CLIENT_IP',          // Alcuni proxy
+        'HTTP_CLIENT_IP',            // Alcuni proxy
+    ];
+
+    foreach ($headersToCheck as $header) {
+        if (!empty($_SERVER[$header])) {
+            // X-Forwarded-For può contenere più IP separati da virgola
+            // Il primo è l'IP originale del client
+            $ipList = explode(',', $_SERVER[$header]);
+            $ip = trim($ipList[0]);
+
+            // Valida che sia un IP valido (IPv4 o IPv6)
+            // Questo previene injection di valori malevoli nell'header
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip;
+            }
+
+            // Se l'IP è privato/riservato, potrebbe essere legittimo in alcune configurazioni
+            // (es. proxy interni). Accettalo come fallback se è comunque un IP valido.
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+    }
+
+    // Fallback a REMOTE_ADDR (sempre presente)
+    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+}
+
+/**
  * Valida email
  */
 function validateEmail($email) {

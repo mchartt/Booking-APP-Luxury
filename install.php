@@ -394,6 +394,22 @@ function createIndexesCLI($conn) {
 // ========== MODALITÀ BROWSER ==========
 session_start();
 
+// ===== BLOCCO CRITICO DI SICUREZZA =====
+// Impedisce la re-esecuzione dell'installer se .env esiste già.
+// Protegge contro attacchi di takeover via sovrascrittura credenziali DB.
+if (file_exists(__DIR__ . '/.env')) {
+    http_response_code(403);
+    die('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accesso Negato</title>
+    <style>body{font-family:sans-serif;background:#f5efe7;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;}
+    .box{background:white;padding:40px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:500px;text-align:center;}
+    h1{color:#c62828;margin-bottom:16px;}p{color:#666;line-height:1.6;}</style></head>
+    <body><div class="box"><h1>Installazione già completata</h1>
+    <p>Per ragioni di sicurezza, questo file non può essere eseguito quando il file <code>.env</code> è già presente.</p>
+    <p><strong>Per ripetere il setup:</strong> elimina manualmente il file <code>.env</code> dal server.</p>
+    <p><strong>Raccomandazione:</strong> rimuovi o rinomina questo file (<code>install.php</code>) in produzione.</p>
+    </div></body></html>');
+}
+
 // Se il form è stato inviato
 $step = $_POST['step'] ?? $_GET['step'] ?? '1';
 $message = '';

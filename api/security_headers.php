@@ -1,11 +1,34 @@
 <?php
 /**
- * security_headers.php - Security headers centralizzati
+ * security_headers.php - Security headers e sessione centralizzati
  * Include questo file all'inizio di ogni API PHP
+ *
+ * IMPORTANTE: Questo file gestisce l'inizializzazione sicura della sessione.
+ * NON chiamare session_start() negli altri file API.
  */
 
 // Determina ambiente (localhost vs produzione)
 $isLocalhost = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1', 'localhost:8080', '127.0.0.1:8080']);
+
+// ===== INIZIALIZZAZIONE SESSIONE SICURA =====
+// Centralizzata qui per evitare duplicazioni e garantire consistenza
+
+if (session_status() === PHP_SESSION_NONE) {
+    // Determina se la connessione è HTTPS
+    $isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+
+    // Configura cookie di sessione sicuri
+    session_set_cookie_params([
+        'lifetime' => 0,           // Cookie di sessione (scade alla chiusura del browser)
+        'path' => '/',             // Accessibile da tutto il sito
+        'domain' => '',            // Dominio corrente
+        'secure' => $isSecure,     // Solo HTTPS in produzione
+        'httponly' => true,        // Non accessibile via JavaScript (previene XSS)
+        'samesite' => 'Strict'     // Previene CSRF cross-site
+    ]);
+
+    session_start();
+}
 
 // ===== HTTPS REDIRECT =====
 // Forza HTTPS in produzione

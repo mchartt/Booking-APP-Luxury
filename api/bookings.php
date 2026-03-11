@@ -4,20 +4,7 @@
  * Con error handling robusto e protezione SQL injection
  */
 
-// Secure session cookie settings
-$isSecure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path' => '/',
-    'domain' => '',
-    'secure' => $isSecure,
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-
-session_start();
-
-// Security headers centralizzati
+// Security headers e sessione centralizzati
 require_once __DIR__ . '/security_headers.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -133,17 +120,12 @@ function getAllBookings() {
 
         $bookings = [];
         while ($row = $result->fetch_assoc()) {
-            // Oscura email parzialmente per privacy
-            if (isset($row['email'])) {
-                $parts = explode('@', $row['email']);
-                if (count($parts) === 2) {
-                    $row['email'] = substr($parts[0], 0, 3) . '***@' . $parts[1];
-                }
-            }
+            // NOTA: Email in chiaro per admin autenticati (necessario per contattare clienti)
+            // L'endpoint è già protetto da requireAdminAuth()
             $bookings[] = $row;
         }
 
-        $stmt->close();
+        $stmt->close();;
 
         echo json_encode([
             'success' => true,

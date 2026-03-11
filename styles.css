@@ -51,12 +51,12 @@
     --shadow-xl: 0 18px 48px rgba(47, 36, 26, 0.18);
     
     /* Transitions */
-    --transition: all 0.3s ease;
     --transition-fast: 0.2s ease-out;
     --transition-base: 0.3s ease-out;
     --transition-slow: 0.6s ease-out;
+    --transition: var(--transition-base);
 
-    --border-radius: 18px;
+    --border-radius: var(--radius-lg);
 }
 
 body {

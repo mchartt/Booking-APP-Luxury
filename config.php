@@ -321,12 +321,67 @@ function columnExists($conn, $table, $column) {
  * @return string L'IP del client (IPv4 o IPv6)
  */
 function getClientIp() {
+    // Flag statico per evitare warning multipli nella stessa richiesta
+    static $proxyWarningLogged = false;
+
     // IP della connessione diretta (non falsificabile)
     $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
     // Carica lista proxy fidati da variabile d'ambiente
     // Formato: lista separata da virgole (es: "127.0.0.1,10.0.0.1,173.245.48.0/20")
     $trustedProxiesEnv = $_ENV['TRUSTED_PROXIES'] ?? getenv('TRUSTED_PROXIES') ?: '';
+
+    // ===== PROXY MISCONFIGURATION DETECTION =====
+    // Se ci sono header proxy ma TRUSTED_PROXIES non è configurato,
+    // probabilmente l'app è dietro un Load Balancer/CDN ma il DevOps
+    // ha dimenticato di configurare TRUSTED_PROXIES.
+    // Questo ROMPE il rate limiting perché tutti gli utenti avranno lo stesso IP!
+    if (empty($trustedProxiesEnv) && !$proxyWarningLogged) {
+        $proxyHeadersPresent = [];
+
+        // Controlla gli header proxy comuni
+        $proxyHeaders = [
+            'HTTP_X_FORWARDED_FOR' => 'X-Forwarded-For',
+            'HTTP_CF_CONNECTING_IP' => 'CF-Connecting-IP (Cloudflare)',
+            'HTTP_X_REAL_IP' => 'X-Real-IP',
+            'HTTP_X_FORWARDED_PROTO' => 'X-Forwarded-Proto',
+            'HTTP_X_FORWARDED_HOST' => 'X-Forwarded-Host',
+        ];
+
+        foreach ($proxyHeaders as $serverKey => $headerName) {
+            if (!empty($_SERVER[$serverKey])) {
+                $proxyHeadersPresent[] = $headerName;
+            }
+        }
+
+        // Se almeno un header proxy è presente, logga un warning critico
+        if (!empty($proxyHeadersPresent)) {
+            $proxyWarningLogged = true;
+
+            $headersFound = implode(', ', $proxyHeadersPresent);
+            $requestUri = $_SERVER['REQUEST_URI'] ?? 'N/A';
+
+            // Formato standard per sistemi di monitoring/alerting (grep-friendly)
+            error_log(sprintf(
+                '[CRITICAL] PROXY_MISCONFIGURATION - Header proxy rilevati (%s) ma TRUSTED_PROXIES non configurato. ' .
+                'REMOTE_ADDR=%s usato per TUTTI gli utenti. ' .
+                'IMPATTO: Rate limiting non funzionante, audit log incorretti, geolocalizzazione impossibile. ' .
+                'AZIONE: Configurare TRUSTED_PROXIES in .env con IP del Load Balancer/CDN. ' .
+                'Request: %s',
+                $headersFound,
+                $remoteAddr,
+                $requestUri
+            ));
+
+            // Log aggiuntivo con dettagli per debug (solo se X-Forwarded-For presente)
+            if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+                error_log(sprintf(
+                    '[DEBUG] PROXY_MISCONFIGURATION - X-Forwarded-For: %s (IP reali degli utenti ignorati)',
+                    $_SERVER['HTTP_X_FORWARDED_FOR']
+                ));
+            }
+        }
+    }
 
     // Se non ci sono proxy fidati configurati, usa sempre REMOTE_ADDR (più sicuro)
     if (empty($trustedProxiesEnv)) {

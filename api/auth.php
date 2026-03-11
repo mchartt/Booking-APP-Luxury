@@ -309,51 +309,26 @@ function verifyEmail() {
         exit;
     }
 
-    // ===== PROTEZIONE RACE CONDITION (TOCTOU) =====
-    // Usa transazione con locking per prevenire che due utenti vengano
-    // promossi ad admin contemporaneamente quando count == 0
-    $conn->begin_transaction();
+    // Aggiorna utente - TUTTI gli utenti vanno in stato 'pending'
+    // Il primo admin deve essere creato via CLI (create_superadmin.php)
+    $stmt = $conn->prepare("UPDATE admin_users SET
+        email_verified = TRUE,
+        verification_token = NULL,
+        token_expires_at = NULL,
+        status = 'pending'
+        WHERE id = ?");
+    $stmt->bind_param("i", $user['id']);
 
-    try {
-        // Lock esclusivo sulla tabella admin_users per questa operazione
-        // FOR UPDATE blocca le righe lette fino al commit della transazione
-        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM admin_users WHERE status = 'active' FOR UPDATE");
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $activeCount = $result->fetch_assoc()['count'];
+    if (!$stmt->execute()) {
+        error_log('verifyEmail update error: ' . $stmt->error);
         $stmt->close();
-
-        // Se è il primo utente, approvalo automaticamente
-        $newStatus = ($activeCount == 0) ? 'active' : 'pending';
-
-        // Aggiorna utente (all'interno della stessa transazione)
-        $stmt = $conn->prepare("UPDATE admin_users SET
-            email_verified = TRUE,
-            verification_token = NULL,
-            token_expires_at = NULL,
-            status = ?
-            WHERE id = ?");
-        $stmt->bind_param("si", $newStatus, $user['id']);
-        $stmt->execute();
-        $stmt->close();
-
-        // Commit della transazione - rilascia i lock
-        $conn->commit();
-
-    } catch (Exception $e) {
-        // Rollback in caso di errore
-        $conn->rollback();
-        error_log('verifyEmail transaction error: ' . $e->getMessage());
         header('Location: ../login.html?error=verification_failed');
         exit;
     }
+    $stmt->close();
 
-    // Redirect a login con messaggio appropriato
-    if ($newStatus === 'active') {
-        header('Location: ../login.html?verified=1&first_admin=1');
-    } else {
-        header('Location: ../login.html?verified=1&pending=1');
-    }
+    // Redirect a login - utente deve attendere approvazione admin
+    header('Location: ../login.html?verified=1&pending=1');
     exit;
 }
 
@@ -708,7 +683,7 @@ function sendVerificationEmail($email, $username, $verificationUrl) {
                 </p>
                 <div class='warning'>
                     <strong>Nota:</strong> Dopo la verifica, il tuo account sara in attesa di approvazione
-                    da parte di un amministratore esistente (a meno che tu non sia il primo admin).
+                    da parte di un amministratore.
                 </div>
                 <p>Se non hai richiesto questa registrazione, ignora questa email.</p>
                 <p>Il link scade tra 24 ore.</p>
@@ -727,7 +702,8 @@ function sendVerificationEmail($email, $username, $verificationUrl) {
 
     // In sviluppo, logga invece di inviare
     // return @mail($email, $subject, $message, $headers);
-    error_log("EMAIL TO: $email - SUBJECT: $subject");
+    // SECURITY: Non loggare email per protezione PII
+    error_log("Verification email queued for user: " . htmlspecialchars($username, ENT_QUOTES, 'UTF-8'));
     return true; // Simula invio riuscito
 }
 
@@ -777,7 +753,8 @@ function sendApprovalEmail($email, $username) {
     $headers .= "From: noreply@luxuryhotel.it\r\n";
 
     // return @mail($email, $subject, $message, $headers);
-    error_log("APPROVAL EMAIL TO: $email");
+    // SECURITY: Non loggare email per protezione PII
+    error_log("Approval email queued for user: " . htmlspecialchars($username, ENT_QUOTES, 'UTF-8'));
     return true;
 }
 ?>

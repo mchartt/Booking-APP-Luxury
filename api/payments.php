@@ -104,6 +104,14 @@ if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
 // Configurazione Stripe (da environment)
 $stripeSecretKey = $_ENV['STRIPE_SECRET_KEY'] ?? getenv('STRIPE_SECRET_KEY') ?: '';
 
+// Configurazione PayPal (da environment)
+$paypalClientId = $_ENV['PAYPAL_CLIENT_ID'] ?? getenv('PAYPAL_CLIENT_ID') ?: '';
+$paypalClientSecret = $_ENV['PAYPAL_CLIENT_SECRET'] ?? getenv('PAYPAL_CLIENT_SECRET') ?: '';
+$paypalMode = $_ENV['PAYPAL_MODE'] ?? getenv('PAYPAL_MODE') ?: 'sandbox'; // 'sandbox' o 'live'
+$paypalApiBase = ($paypalMode === 'live')
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com';
+
 // Configurazione pagamenti
 define('VALID_PAYMENT_METHODS', ['card', 'paypal', 'iban']);
 define('VALID_PAYMENT_STATUSES', ['pending', 'processing', 'completed', 'failed', 'pending_transfer', 'refunded']);
@@ -336,6 +344,17 @@ function handlePostRequest() {
     $action = $input['action'] ?? null;
     if ($action === 'confirm_stripe_payment') {
         confirmStripePayment($input);
+        return;
+    }
+
+    // ===== PAYPAL ENDPOINTS (ZERO-TRUST) =====
+    if ($action === 'create_paypal_order') {
+        createPayPalOrder($input);
+        return;
+    }
+
+    if ($action === 'capture_paypal_order') {
+        capturePayPalOrder($input);
         return;
     }
 
@@ -633,7 +652,9 @@ function confirmStripePayment($data) {
         ]);
 
     } catch (\Stripe\Exception\InvalidRequestException $e) {
-        error_log('Stripe Error (confirm): ' . $e->getMessage());
+        // SECURITY: Logga solo codice errore, non messaggio completo
+        $errorCode = $e->getError()->code ?? 'invalid_request';
+        error_log('Stripe Error (confirm): code=' . $errorCode . ' - pi=' . $paymentIntentId);
         http_response_code(400);
         echo json_encode([
             'success' => false,
@@ -644,7 +665,8 @@ function confirmStripePayment($data) {
         if (isset($conn) && $conn->inTransaction()) {
             $conn->rollback();
         }
-        error_log('Confirm Payment Error: ' . $e->getMessage());
+        // SECURITY: Logga solo tipo eccezione, non messaggio completo
+        error_log('Confirm Payment Error: ' . get_class($e) . ' - booking=' . $bookingId);
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -654,19 +676,371 @@ function confirmStripePayment($data) {
 }
 
 /**
- * Processa pagamento PayPal
+ * Ottiene un access token OAuth2 da PayPal
+ * SICUREZZA: Le credentials sono lette da environment variables
+ *
+ * @return string|null Access token o null in caso di errore
+ */
+function getPayPalAccessToken() {
+    global $paypalClientId, $paypalClientSecret, $paypalApiBase;
+
+    if (empty($paypalClientId) || empty($paypalClientSecret)) {
+        error_log('PayPal Error: Credenziali non configurate');
+        return null;
+    }
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $paypalApiBase . '/v1/oauth2/token',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => 'grant_type=client_credentials',
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            'Accept-Language: it_IT'
+        ],
+        CURLOPT_USERPWD => $paypalClientId . ':' . $paypalClientSecret,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => true
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        error_log('PayPal OAuth Error: HTTP ' . $httpCode);
+        return null;
+    }
+
+    $data = json_decode($response, true);
+    return $data['access_token'] ?? null;
+}
+
+/**
+ * Crea un ordine PayPal con importo recuperato dal database
+ * ZERO-TRUST: L'importo NON viene dal client, solo il booking_id
+ *
+ * @param array $input Dati dalla richiesta (solo booking_id)
+ */
+function createPayPalOrder($input) {
+    global $conn, $paypalApiBase;
+
+    try {
+        $bookingId = trim($input['booking_id'] ?? '');
+
+        // Validazione booking_id
+        if (!validateBookingId($bookingId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'ID prenotazione non valido'
+            ]);
+            return;
+        }
+
+        // ZERO-TRUST: Recupera l'importo dal database
+        $bookingData = checkBookingForPayment($bookingId);
+        if ($bookingData['valid'] !== true || $bookingData['booking'] === null) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Prenotazione non valida o già pagata',
+                'errors' => $bookingData['errors'] ?? []
+            ]);
+            return;
+        }
+
+        $amount = $bookingData['booking']['amount'];
+
+        // Ottieni access token PayPal
+        $accessToken = getPayPalAccessToken();
+        if (!$accessToken) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore di configurazione PayPal'
+            ]);
+            return;
+        }
+
+        // Crea ordine PayPal via API REST
+        $orderPayload = [
+            'intent' => 'CAPTURE',
+            'purchase_units' => [[
+                'reference_id' => $bookingId,
+                'description' => 'Prenotazione Luxury Hotel - ' . $bookingId,
+                'custom_id' => $bookingId,
+                'amount' => [
+                    'currency_code' => 'EUR',
+                    'value' => number_format($amount, 2, '.', '')
+                ]
+            ]],
+            'application_context' => [
+                'brand_name' => 'Luxury Hotel',
+                'locale' => 'it-IT',
+                'landing_page' => 'NO_PREFERENCE',
+                'user_action' => 'PAY_NOW',
+                'return_url' => 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/payment-success.html',
+                'cancel_url' => 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/payment.php'
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $paypalApiBase . '/v2/checkout/orders',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($orderPayload),
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken,
+                'PayPal-Request-Id: ' . $bookingId . '_' . time()
+            ],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 201) {
+            // SECURITY: Non loggare payload completo per protezione PII
+            $errorCode = json_decode($response, true)['name'] ?? 'UNKNOWN';
+            error_log('PayPal Create Order Error: HTTP ' . $httpCode . ' - code: ' . $errorCode . ' - booking: ' . $bookingId);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore nella creazione ordine PayPal'
+            ]);
+            return;
+        }
+
+        $orderData = json_decode($response, true);
+        $orderId = $orderData['id'] ?? null;
+
+        if (!$orderId) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Risposta PayPal non valida'
+            ]);
+            return;
+        }
+
+        // Aggiorna stato prenotazione a processing
+        $stmt = $conn->prepare("UPDATE prenotazioni SET payment_status = 'processing' WHERE booking_id = ?");
+        $stmt->bind_param("s", $bookingId);
+        $stmt->execute();
+        $stmt->close();
+
+        http_response_code(200);
+        echo json_encode([
+            'success' => true,
+            'order_id' => $orderId
+        ]);
+
+    } catch (Exception $e) {
+        // SECURITY: Logga solo tipo eccezione
+        error_log('PayPal Create Order Exception: ' . get_class($e) . ' - booking=' . $bookingId);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Errore interno nella creazione ordine'
+        ]);
+    }
+}
+
+/**
+ * Cattura un ordine PayPal dopo l'approvazione utente
+ * ZERO-TRUST: Verifica che l'ordine corrisponda al booking_id
+ *
+ * @param array $input Dati dalla richiesta (order_id, booking_id)
+ */
+function capturePayPalOrder($input) {
+    global $conn, $paypalApiBase;
+
+    try {
+        $orderId = trim($input['order_id'] ?? '');
+        $bookingId = trim($input['booking_id'] ?? '');
+
+        // Validazione input
+        if (empty($orderId) || !preg_match('/^[A-Z0-9]+$/', $orderId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Order ID PayPal non valido'
+            ]);
+            return;
+        }
+
+        if (!validateBookingId($bookingId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'ID prenotazione non valido'
+            ]);
+            return;
+        }
+
+        // Ottieni access token
+        $accessToken = getPayPalAccessToken();
+        if (!$accessToken) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore di configurazione PayPal'
+            ]);
+            return;
+        }
+
+        // Prima recupera l'ordine per verificare booking_id
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $paypalApiBase . '/v2/checkout/orders/' . $orderId,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken
+            ],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true
+        ]);
+
+        $orderResponse = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            error_log('PayPal Get Order Error: HTTP ' . $httpCode);
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Ordine PayPal non trovato'
+            ]);
+            return;
+        }
+
+        $orderData = json_decode($orderResponse, true);
+
+        // ZERO-TRUST: Verifica che l'ordine sia per questo booking
+        $orderBookingId = $orderData['purchase_units'][0]['custom_id'] ?? '';
+        if ($orderBookingId !== $bookingId) {
+            error_log("PayPal Order mismatch: order=$orderBookingId, request=$bookingId");
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Ordine non corrispondente alla prenotazione'
+            ]);
+            return;
+        }
+
+        // Cattura il pagamento
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $paypalApiBase . '/v2/checkout/orders/' . $orderId . '/capture',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => '{}',
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken,
+                'PayPal-Request-Id: capture_' . $bookingId . '_' . time()
+            ],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true
+        ]);
+
+        $captureResponse = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 201 && $httpCode !== 200) {
+            // SECURITY: Non loggare payload completo per protezione PII
+            $errorCode = json_decode($captureResponse, true)['name'] ?? 'UNKNOWN';
+            error_log('PayPal Capture Error: HTTP ' . $httpCode . ' - code: ' . $errorCode . ' - order: ' . $orderId);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore nella cattura del pagamento'
+            ]);
+            return;
+        }
+
+        $captureData = json_decode($captureResponse, true);
+
+        // Verifica stato cattura
+        if (($captureData['status'] ?? '') !== 'COMPLETED') {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Pagamento non completato',
+                'status' => $captureData['status'] ?? 'unknown'
+            ]);
+            return;
+        }
+
+        // Estrai ID transazione
+        $transactionId = $captureData['purchase_units'][0]['payments']['captures'][0]['id'] ?? $orderId;
+        $capturedAmount = $captureData['purchase_units'][0]['payments']['captures'][0]['amount']['value'] ?? '0';
+
+        // Aggiorna database
+        $conn->begin_transaction();
+
+        updateBookingPaymentStatus($bookingId, 'completed', 'paypal', $transactionId);
+
+        // Inserisci record pagamento
+        $stmt = $conn->prepare("INSERT INTO payments
+            (booking_id, transaction_id, amount, method, status, created_at)
+            VALUES (?, ?, ?, 'paypal', 'completed', NOW())
+            ON DUPLICATE KEY UPDATE status = 'completed'");
+
+        if ($stmt) {
+            $stmt->bind_param("ssd", $bookingId, $transactionId, $capturedAmount);
+            $stmt->execute();
+            $stmt->close();
+        }
+
+        $conn->commit();
+
+        http_response_code(200);
+        echo json_encode([
+            'success' => true,
+            'message' => 'Pagamento PayPal completato',
+            'transaction_id' => $transactionId,
+            'amount' => $capturedAmount
+        ]);
+
+    } catch (Exception $e) {
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollback();
+        }
+        // SECURITY: Logga solo tipo eccezione
+        error_log('PayPal Capture Exception: ' . get_class($e) . ' - order=' . $orderId);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Errore interno nella cattura del pagamento'
+        ]);
+    }
+}
+
+/**
+ * Processa pagamento PayPal (legacy, mantenuta per compatibilità)
  * ZERO-TRUST: L'importo viene passato dal chiamante (recuperato dal DB),
  * non accettato dal client
  *
  * @param string $bookingId ID prenotazione
  * @param float $amount Importo autoritativo dal database
+ * @deprecated Usare createPayPalOrder + capturePayPalOrder
  */
 function processPayPalPayment($bookingId, $amount) {
     global $conn;
 
     try {
-        // In produzione: qui ci sarebbe l'integrazione con PayPal SDK
-        // Per demo, simuliamo il redirect
+        // Legacy: questa funzione è mantenuta per retrocompatibilità
+        // I nuovi pagamenti usano createPayPalOrder + capturePayPalOrder
 
         // Genera transaction ID
         $transactionId = 'PP_' . date('YmdHis') . '_' . bin2hex(random_bytes(8));
@@ -690,7 +1064,8 @@ function processPayPalPayment($bookingId, $amount) {
 
     } catch (Exception $e) {
         $conn->rollback();
-        error_log('PayPal Payment Error: ' . $e->getMessage());
+        // SECURITY: Logga solo tipo eccezione
+        error_log('PayPal Payment Error: ' . get_class($e) . ' - booking=' . $bookingId);
 
         http_response_code(500);
         echo json_encode([
@@ -736,7 +1111,8 @@ function processIBANPayment($bookingId, $amount) {
 
     } catch (Exception $e) {
         $conn->rollback();
-        error_log('IBAN Payment Error: ' . $e->getMessage());
+        // SECURITY: Logga solo tipo eccezione
+        error_log('IBAN Payment Error: ' . get_class($e) . ' - booking=' . $bookingId);
 
         http_response_code(500);
         echo json_encode([
@@ -825,6 +1201,343 @@ function updateBookingPaymentStatus($bookingId, $status, $method, $transactionId
     return true;
 }
 
+// ===== PAYPAL API FUNCTIONS (ZERO-TRUST) =====
+
+/**
+ * Ottiene un access token PayPal OAuth2
+ *
+ * @return string|false Access token o false in caso di errore
+ */
+function getPayPalAccessToken() {
+    global $paypalClientId, $paypalClientSecret, $paypalApiBase;
+
+    if (empty($paypalClientId) || empty($paypalClientSecret)) {
+        error_log('PayPal Error: Credenziali non configurate');
+        return false;
+    }
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $paypalApiBase . '/v1/oauth2/token',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => 'grant_type=client_credentials',
+        CURLOPT_USERPWD => $paypalClientId . ':' . $paypalClientSecret,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json'
+        ],
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => true
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlError) {
+        error_log('PayPal cURL Error: ' . $curlError);
+        return false;
+    }
+
+    if ($httpCode !== 200) {
+        // SECURITY: Non loggare payload OAuth per protezione credenziali
+        $errorType = json_decode($response, true)['error'] ?? 'auth_failed';
+        error_log('PayPal Auth Error: HTTP ' . $httpCode . ' - type: ' . $errorType);
+        return false;
+    }
+
+    $data = json_decode($response, true);
+    return $data['access_token'] ?? false;
+}
+
+/**
+ * Crea un ordine PayPal - ZERO-TRUST
+ * L'importo viene recuperato dal database, MAI dal client
+ *
+ * @param array $input Dati dalla richiesta (booking_id)
+ */
+function createPayPalOrder($input) {
+    global $conn, $paypalApiBase;
+
+    try {
+        $bookingId = trim($input['booking_id'] ?? '');
+
+        // Validazione booking_id
+        if (!validateBookingId($bookingId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'ID prenotazione non valido'
+            ]);
+            return;
+        }
+
+        // ZERO-TRUST: Recupera l'importo autoritativo dal database
+        $bookingData = checkBookingForPayment($bookingId);
+
+        if ($bookingData['valid'] !== true || $bookingData['booking'] === null) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Prenotazione non valida o già pagata',
+                'errors' => $bookingData['errors'] ?? []
+            ]);
+            return;
+        }
+
+        $amount = $bookingData['booking']['amount'];
+
+        // Ottieni access token PayPal
+        $accessToken = getPayPalAccessToken();
+        if (!$accessToken) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Impossibile connettersi a PayPal. Riprova più tardi.'
+            ]);
+            return;
+        }
+
+        // Crea l'ordine PayPal con l'importo dal DB
+        $orderData = [
+            'intent' => 'CAPTURE',
+            'purchase_units' => [
+                [
+                    'reference_id' => $bookingId,
+                    'description' => 'Prenotazione Luxury Hotel - ' . $bookingId,
+                    'amount' => [
+                        'currency_code' => 'EUR',
+                        'value' => number_format($amount, 2, '.', '')
+                    ],
+                    'custom_id' => $bookingId
+                ]
+            ],
+            'application_context' => [
+                'brand_name' => 'Luxury Hotel',
+                'locale' => 'it-IT',
+                'landing_page' => 'NO_PREFERENCE',
+                'shipping_preference' => 'NO_SHIPPING',
+                'user_action' => 'PAY_NOW'
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $paypalApiBase . '/v2/checkout/orders',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($orderData),
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken,
+                'PayPal-Request-Id: ' . $bookingId . '_' . time() // Idempotency key
+            ],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            error_log('PayPal Create Order cURL Error: ' . $curlError);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore di comunicazione con PayPal'
+            ]);
+            return;
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode !== 201 || empty($responseData['id'])) {
+            // SECURITY: Non loggare payload completo per protezione PII
+            $errorCode = $responseData['name'] ?? 'UNKNOWN';
+            error_log('PayPal Create Order Error: HTTP ' . $httpCode . ' - code: ' . $errorCode . ' - booking: ' . $bookingId);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore nella creazione dell\'ordine PayPal'
+            ]);
+            return;
+        }
+
+        // Ordine creato con successo - restituisci l'ID al frontend
+        http_response_code(200);
+        echo json_encode([
+            'success' => true,
+            'orderID' => $responseData['id'],
+            'status' => $responseData['status']
+        ]);
+
+    } catch (Exception $e) {
+        // SECURITY: Logga solo tipo eccezione
+        error_log('PayPal Create Order Exception: ' . get_class($e) . ' - booking=' . $bookingId);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Errore interno durante la creazione dell\'ordine'
+        ]);
+    }
+}
+
+/**
+ * Cattura un ordine PayPal dopo l'approvazione dell'utente
+ *
+ * @param array $input Dati dalla richiesta (order_id, booking_id)
+ */
+function capturePayPalOrder($input) {
+    global $conn, $paypalApiBase;
+
+    try {
+        $orderId = trim($input['order_id'] ?? '');
+        $bookingId = trim($input['booking_id'] ?? '');
+
+        // Validazione input
+        if (empty($orderId) || !preg_match('/^[A-Z0-9]+$/', $orderId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Order ID PayPal non valido'
+            ]);
+            return;
+        }
+
+        if (!validateBookingId($bookingId)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'ID prenotazione non valido'
+            ]);
+            return;
+        }
+
+        // Ottieni access token PayPal
+        $accessToken = getPayPalAccessToken();
+        if (!$accessToken) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Impossibile connettersi a PayPal'
+            ]);
+            return;
+        }
+
+        // Cattura il pagamento
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $paypalApiBase . '/v2/checkout/orders/' . $orderId . '/capture',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => '{}',
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken,
+                'PayPal-Request-Id: capture_' . $bookingId . '_' . time()
+            ],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            error_log('PayPal Capture cURL Error: ' . $curlError);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Errore di comunicazione con PayPal'
+            ]);
+            return;
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode !== 201 || ($responseData['status'] ?? '') !== 'COMPLETED') {
+            // SECURITY: Non loggare payload completo per protezione PII
+            $errorCode = $responseData['name'] ?? ($responseData['status'] ?? 'UNKNOWN');
+            error_log('PayPal Capture Error: HTTP ' . $httpCode . ' - code: ' . $errorCode . ' - order: ' . $orderId);
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Pagamento PayPal non completato',
+                'status' => $responseData['status'] ?? 'UNKNOWN'
+            ]);
+            return;
+        }
+
+        // SICUREZZA: Verifica che il booking_id nel custom_id corrisponda
+        $capturedBookingId = $responseData['purchase_units'][0]['payments']['captures'][0]['custom_id'] ?? '';
+        if ($capturedBookingId !== $bookingId) {
+            error_log('PayPal Capture: booking_id mismatch - expected: ' . $bookingId . ', got: ' . $capturedBookingId);
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Prenotazione non corrispondente'
+            ]);
+            return;
+        }
+
+        // Estrai transaction ID dal capture
+        $captureId = $responseData['purchase_units'][0]['payments']['captures'][0]['id'] ?? $orderId;
+        $amount = $responseData['purchase_units'][0]['payments']['captures'][0]['amount']['value'] ?? 0;
+        $payerEmail = $responseData['payer']['email_address'] ?? '';
+
+        // Inizia transazione DB
+        $conn->begin_transaction();
+
+        // Aggiorna stato prenotazione
+        updateBookingPaymentStatus($bookingId, 'completed', 'paypal', $captureId);
+
+        // Inserisci record pagamento
+        $stmt = $conn->prepare("INSERT INTO payments
+            (booking_id, transaction_id, amount, method, paypal_email, status, created_at)
+            VALUES (?, ?, ?, 'paypal', ?, 'completed', NOW())
+            ON DUPLICATE KEY UPDATE status = 'completed', paypal_email = ?");
+
+        if ($stmt) {
+            $amountFloat = floatval($amount);
+            $stmt->bind_param("ssdss", $bookingId, $captureId, $amountFloat, $payerEmail, $payerEmail);
+            $stmt->execute();
+            $stmt->close();
+        }
+
+        $conn->commit();
+
+        // Log per audit
+        error_log("PayPal payment completed: booking=$bookingId, capture=$captureId, amount=$amount");
+
+        http_response_code(200);
+        echo json_encode([
+            'success' => true,
+            'message' => 'Pagamento PayPal completato con successo',
+            'transaction_id' => $captureId,
+            'amount' => $amount,
+            'payer_email' => $payerEmail
+        ]);
+
+    } catch (Exception $e) {
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollback();
+        }
+        // SECURITY: Logga solo tipo eccezione
+        error_log('PayPal Capture Exception: ' . get_class($e) . ' - order=' . $orderId);
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Errore durante la cattura del pagamento'
+        ]);
+    }
+}
+
 // ===== WEBHOOK HANDLER (per integrazioni future) =====
 
 /**
@@ -895,7 +1608,8 @@ function handleWebhook() {
         $event = \Stripe\Webhook::constructEvent($payload, $sigHeader, $webhookSecret);
 
     } catch (\Stripe\Exception\SignatureVerificationException $e) {
-        error_log('Webhook Error: Firma Stripe non valida - ' . $e->getMessage());
+        // SECURITY: Non loggare dettagli, solo evento e IP
+        error_log('Webhook Error: Firma Stripe non valida - IP: ' . getClientIp());
         http_response_code(401);
         echo json_encode([
             'success' => false,
@@ -903,7 +1617,8 @@ function handleWebhook() {
         ]);
         return;
     } catch (\UnexpectedValueException $e) {
-        error_log('Webhook Error: Payload non valido - ' . $e->getMessage());
+        // SECURITY: Non loggare contenuto payload
+        error_log('Webhook Error: Payload non valido - IP: ' . getClientIp());
         http_response_code(400);
         echo json_encode([
             'success' => false,
@@ -982,7 +1697,8 @@ function handleWebhook() {
         echo json_encode(['received' => true]);
 
     } catch (Exception $e) {
-        error_log('Webhook Processing Error: ' . $e->getMessage());
+        // SECURITY: Logga solo tipo eccezione e tipo evento
+        error_log('Webhook Processing Error: ' . get_class($e) . ' - event_type=' . ($event->type ?? 'unknown'));
         http_response_code(500);
         echo json_encode([
             'success' => false,

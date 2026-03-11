@@ -257,17 +257,19 @@ try {
 
 } catch (\Stripe\Exception\CardException $e) {
     // Errore relativo alla carta (declinata, etc.)
-    error_log('Stripe CardException: ' . $e->getMessage());
+    // SECURITY: Logga solo codice errore, non messaggio completo che potrebbe contenere info carta
+    $errorCode = $e->getError()->code ?? 'card_error';
+    error_log('Stripe CardException: code=' . $errorCode . ' - booking=' . $bookingId);
     http_response_code(400);
     echo json_encode([
         'success' => false,
         'message' => 'Carta non valida o rifiutata',
-        'error_code' => $e->getError()->code ?? 'card_error'
+        'error_code' => $errorCode
     ]);
 
 } catch (\Stripe\Exception\RateLimitException $e) {
     // Troppi request a Stripe
-    error_log('Stripe RateLimitException: ' . $e->getMessage());
+    error_log('Stripe RateLimitException - booking=' . $bookingId);
     http_response_code(429);
     echo json_encode([
         'success' => false,
@@ -276,7 +278,9 @@ try {
 
 } catch (\Stripe\Exception\InvalidRequestException $e) {
     // Parametri non validi
-    error_log('Stripe InvalidRequestException: ' . $e->getMessage());
+    // SECURITY: Logga solo codice errore
+    $errorCode = $e->getError()->code ?? 'invalid_request';
+    error_log('Stripe InvalidRequestException: code=' . $errorCode . ' - booking=' . $bookingId);
     http_response_code(400);
     echo json_encode([
         'success' => false,
@@ -285,7 +289,7 @@ try {
 
 } catch (\Stripe\Exception\AuthenticationException $e) {
     // Chiave API non valida
-    error_log('Stripe AuthenticationException: ' . $e->getMessage());
+    error_log('Stripe AuthenticationException: API key configuration error');
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -294,7 +298,7 @@ try {
 
 } catch (\Stripe\Exception\ApiConnectionException $e) {
     // Problema di rete con Stripe
-    error_log('Stripe ApiConnectionException: ' . $e->getMessage());
+    error_log('Stripe ApiConnectionException - booking=' . $bookingId);
     http_response_code(503);
     echo json_encode([
         'success' => false,
@@ -303,7 +307,9 @@ try {
 
 } catch (\Stripe\Exception\ApiErrorException $e) {
     // Errore generico Stripe
-    error_log('Stripe ApiErrorException: ' . $e->getMessage());
+    // SECURITY: Logga solo codice errore
+    $errorCode = method_exists($e, 'getError') && $e->getError() ? ($e->getError()->code ?? 'api_error') : 'api_error';
+    error_log('Stripe ApiErrorException: code=' . $errorCode . ' - booking=' . $bookingId);
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -312,7 +318,8 @@ try {
 
 } catch (Exception $e) {
     // Altro errore
-    error_log('Payment Config Error: ' . $e->getMessage());
+    // SECURITY: Logga solo tipo eccezione, non messaggio completo
+    error_log('Payment Config Error: ' . get_class($e) . ' - booking=' . $bookingId);
     http_response_code(500);
     echo json_encode([
         'success' => false,

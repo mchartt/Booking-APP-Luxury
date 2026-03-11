@@ -21,7 +21,8 @@ $paymentCsp = implode('; ', [
     "default-src 'self'",
 
     // Script: SOLO file esterni specifici + nonce (NO 'unsafe-inline', NO 'unsafe-eval')
-    "script-src 'self' 'nonce-{$nonce}' https://js.stripe.com",
+    // PayPal SDK richiede www.paypal.com, www.paypalobjects.com e c.paypal.com (consent)
+    "script-src 'self' 'nonce-{$nonce}' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://c.paypal.com",
 
     // Stili: SOLO file esterni + nonce per stili inline necessari
     "style-src 'self' 'nonce-{$nonce}' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
@@ -29,14 +30,14 @@ $paymentCsp = implode('; ', [
     // Font: Google Fonts + Font Awesome
     "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
 
-    // Immagini: solo dal nostro dominio + data URI per icone inline
-    "img-src 'self' data: https:",
+    // Immagini: solo dal nostro dominio + data URI + PayPal (inclusi tracking pixels)
+    "img-src 'self' data: https: https://www.paypal.com https://www.paypalobjects.com https://t.paypal.com https://b.paypal.com",
 
-    // Connessioni API: SOLO nostro backend + Stripe API
-    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com",
+    // Connessioni API: nostro backend + Stripe + PayPal (inclusi endpoint API)
+    "connect-src 'self' https://api.stripe.com https://maps.googleapis.com https://www.paypal.com https://www.sandbox.paypal.com https://api-m.paypal.com https://api-m.sandbox.paypal.com",
 
-    // Frame: Stripe Elements usa iframe per PCI compliance
-    "frame-src https://js.stripe.com https://hooks.stripe.com",
+    // Frame: Stripe + PayPal usano iframe per PCI compliance (incluso consent)
+    "frame-src https://js.stripe.com https://hooks.stripe.com https://www.paypal.com https://www.sandbox.paypal.com https://c.paypal.com",
 
     // CLICKJACKING PREVENTION: nessuno può incapsulare questa pagina
     "frame-ancestors 'none'",
@@ -127,6 +128,14 @@ $csrfToken = $_SESSION['csrf_token'];
 
     <!-- Stripe.js - PCI DSS Compliant (caricato dal CDN Stripe) -->
     <script src="https://js.stripe.com/v3/" nonce="<?php echo htmlspecialchars($nonce, ENT_QUOTES, 'UTF-8'); ?>"></script>
+
+    <!-- PayPal JS SDK - PCI DSS Compliant -->
+    <!-- NOTA: Sostituire sb con il tuo client-id di produzione in .env (PAYPAL_CLIENT_ID) -->
+    <?php
+    $paypalClientId = $_ENV['PAYPAL_CLIENT_ID'] ?? getenv('PAYPAL_CLIENT_ID') ?: 'sb'; // 'sb' = sandbox
+    $paypalCurrency = 'EUR';
+    ?>
+    <script src="https://www.paypal.com/sdk/js?client-id=<?php echo htmlspecialchars($paypalClientId, ENT_QUOTES, 'UTF-8'); ?>&currency=<?php echo $paypalCurrency; ?>&intent=capture" nonce="<?php echo htmlspecialchars($nonce, ENT_QUOTES, 'UTF-8'); ?>"></script>
 </head>
 <body>
     <!-- Header -->

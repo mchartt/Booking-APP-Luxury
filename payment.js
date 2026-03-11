@@ -28,6 +28,9 @@ let stripe = null;
 let cardElement = null;
 let clientSecret = null;
 
+// PayPal Buttons (inizializzati dopo il caricamento della pagina)
+let paypalButtonsRendered = false;
+
 // ========== UTILITY FUNCTIONS ==========
 
 /**
@@ -38,6 +41,61 @@ function sanitizeHTML(str) {
     const temp = document.createElement('div');
     temp.textContent = str;
     return temp.innerHTML;
+}
+
+/**
+ * Valida rigorosamente un indirizzo email
+ * SICUREZZA: Validazione defense-in-depth prima di passare a Stripe SDK
+ * @param {*} email - Il valore da validare
+ * @returns {object} { valid: boolean, email: string|null, reason: string|null }
+ */
+function validateEmail(email) {
+    // Check null/undefined/empty
+    if (email === null || email === undefined) {
+        return { valid: false, email: null, reason: 'Email mancante (null/undefined)' };
+    }
+
+    // Check tipo stringa
+    if (typeof email !== 'string') {
+        return { valid: false, email: null, reason: 'Email non è una stringa' };
+    }
+
+    // Trim e check vuoto
+    const trimmed = email.trim();
+    if (trimmed === '') {
+        return { valid: false, email: null, reason: 'Email vuota' };
+    }
+
+    // Check lunghezza ragionevole (RFC 5321: max 254 caratteri)
+    if (trimmed.length > 254) {
+        return { valid: false, email: null, reason: 'Email troppo lunga' };
+    }
+
+    // Regex robusta per validazione email
+    // Basata su HTML5 spec + controlli aggiuntivi
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
+    if (!emailRegex.test(trimmed)) {
+        return { valid: false, email: null, reason: 'Formato email non valido' };
+    }
+
+    // Check parti dell'email
+    const [localPart, domain] = trimmed.split('@');
+
+    if (!localPart || localPart.length > 64) {
+        return { valid: false, email: null, reason: 'Parte locale email non valida' };
+    }
+
+    if (!domain || domain.length > 255) {
+        return { valid: false, email: null, reason: 'Dominio email non valido' };
+    }
+
+    // Verifica che il dominio abbia almeno un punto (TLD)
+    if (!domain.includes('.')) {
+        return { valid: false, email: null, reason: 'Dominio senza TLD' };
+    }
+
+    return { valid: true, email: trimmed, reason: null };
 }
 
 /**
@@ -228,13 +286,226 @@ async function initializeStripe() {
 
     } catch (error) {
         console.error('Errore inizializzazione Stripe:', error);
-        showNotification('Errore nel caricamento del sistema di pagamento. Ricarica la pagina.', 'error');
 
-        // Disabilita l'opzione carta se Stripe non è disponibile
+        // SICUREZZA/UX: Gestione fallback quando Stripe non è disponibile
+        // Cause comuni: AdBlocker, rete caduta, script bloccati, CSP
+        const isNetworkError = error.message?.includes('network') ||
+                               error.message?.includes('fetch') ||
+                               error.name === 'TypeError';
+
+        const isBlockedError = typeof Stripe === 'undefined' ||
+                                error.message?.includes('blocked') ||
+                                error.message?.includes('load');
+
+        // Messaggio specifico in base alla causa probabile
+        let userMessage = '';
+        if (isBlockedError || typeof Stripe === 'undefined') {
+            userMessage = 'Impossibile caricare il gateway di pagamento con carta. ' +
+                          'Se usi un AdBlocker o estensioni privacy, disabilitale per questa pagina. ' +
+                          'In alternativa, puoi procedere con il Bonifico Bancario.';
+        } else if (isNetworkError) {
+            userMessage = 'Errore di connessione al gateway di pagamento. ' +
+                          'Verifica la tua connessione internet. ' +
+                          'Puoi comunque procedere con il Bonifico Bancario.';
+        } else {
+            userMessage = 'Il pagamento con carta non è disponibile al momento. ' +
+                          'Puoi procedere con il Bonifico Bancario.';
+        }
+
+        // Mostra notifica persistente (warning per non spaventare l'utente)
+        showNotification(userMessage, 'warning');
+
+        // Mostra anche un banner inline nella sezione carta per maggiore visibilità
+        const cardSection = document.getElementById('cardPayment');
+        if (cardSection) {
+            const alertBanner = document.createElement('div');
+            alertBanner.className = 'stripe-unavailable-alert';
+            alertBanner.innerHTML = `
+                <div style="background: #FFF3CD; border: 1px solid #FFEAA7; border-radius: 8px; padding: 16px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px;">
+                    <i class="fas fa-exclamation-triangle" style="color: #D68910; font-size: 20px; flex-shrink: 0; margin-top: 2px;"></i>
+                    <div>
+                        <strong style="color: #9A7B0A; display: block; margin-bottom: 4px;">Pagamento con carta non disponibile</strong>
+                        <span style="color: #7D6608; font-size: 14px;">
+                            ${isBlockedError ? 'Possibile blocco da AdBlocker o estensione privacy.' : 'Servizio temporaneamente non raggiungibile.'}
+                            <br>Usa il <strong>Bonifico Bancario</strong> per completare la prenotazione.
+                        </span>
+                    </div>
+                </div>
+            `;
+            cardSection.insertBefore(alertBanner, cardSection.firstChild);
+        }
+
+        // Disabilita l'opzione carta
         const cardBtn = document.querySelector('[data-method="card"]');
         if (cardBtn) {
             cardBtn.disabled = true;
-            cardBtn.title = 'Pagamento con carta non disponibile';
+            cardBtn.title = 'Pagamento con carta non disponibile - usa Bonifico';
+            cardBtn.style.opacity = '0.5';
+            cardBtn.style.cursor = 'not-allowed';
+        }
+
+        // FALLBACK AUTOMATICO: Attiva il tab Bonifico come metodo predefinito
+        // Questo garantisce che l'utente possa comunque completare il pagamento
+        setTimeout(() => {
+            switchPaymentMethod('iban');
+            showNotification('Bonifico Bancario selezionato automaticamente come metodo di pagamento.', 'info');
+        }, 500); // Piccolo delay per permettere alla UI di aggiornarsi
+    }
+}
+
+// ========== PAYPAL BUTTONS INITIALIZATION ==========
+
+/**
+ * Inizializza PayPal Buttons con architettura Zero-Trust
+ * SICUREZZA: L'importo viene recuperato dal backend, MAI inviato dal frontend
+ */
+async function initializePayPal() {
+    // Verifica che il PayPal SDK sia caricato
+    if (typeof paypal === 'undefined') {
+        console.error('PayPal SDK non caricato');
+        showNotification('PayPal non disponibile. Ricarica la pagina.', 'error');
+
+        // Disabilita l'opzione PayPal
+        const paypalBtn = document.querySelector('[data-method="paypal"]');
+        if (paypalBtn) {
+            paypalBtn.disabled = true;
+            paypalBtn.title = 'PayPal non disponibile';
+        }
+        return;
+    }
+
+    // Verifica che il container esista
+    const container = document.getElementById('paypal-button-container');
+    if (!container) {
+        console.error('Container PayPal non trovato');
+        return;
+    }
+
+    // Evita di renderizzare più volte
+    if (paypalButtonsRendered) {
+        return;
+    }
+
+    try {
+        // Renderizza i PayPal Buttons
+        await paypal.Buttons({
+            // Stile dei bottoni
+            style: {
+                layout: 'vertical',
+                color: 'gold',
+                shape: 'rect',
+                label: 'paypal',
+                height: 50
+            },
+
+            /**
+             * ZERO-TRUST: Crea l'ordine chiamando il backend
+             * Il backend recupera l'importo dal database, non lo riceve dal frontend
+             */
+            createOrder: async function(data, actions) {
+                const csrfToken = getCSRFToken();
+
+                try {
+                    const response = await fetch(PAYMENT_CONFIG.API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({
+                            action: 'create_paypal_order',
+                            booking_id: bookingData.booking_id,
+                            csrf_token: csrfToken
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success || !result.order_id) {
+                        throw new Error(result.message || 'Errore nella creazione dell\'ordine PayPal');
+                    }
+
+                    // Restituisci l'order ID al PayPal SDK
+                    return result.order_id;
+
+                } catch (error) {
+                    console.error('Errore createOrder PayPal:', error);
+                    showNotification(error.message || 'Errore nella creazione dell\'ordine PayPal', 'error');
+                    throw error;
+                }
+            },
+
+            /**
+             * Cattura il pagamento dopo l'approvazione dell'utente
+             */
+            onApprove: async function(data, actions) {
+                const csrfToken = getCSRFToken();
+
+                showLoading(true);
+
+                try {
+                    const response = await fetch(PAYMENT_CONFIG.API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({
+                            action: 'capture_paypal_order',
+                            order_id: data.orderID,
+                            booking_id: bookingData.booking_id,
+                            csrf_token: csrfToken
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        throw new Error(result.message || 'Errore nella cattura del pagamento');
+                    }
+
+                    // Pagamento completato!
+                    console.log('PayPal payment completed:', result);
+                    showSuccessModal(false);
+
+                } catch (error) {
+                    console.error('Errore onApprove PayPal:', error);
+                    showNotification(error.message || 'Errore nel completamento del pagamento', 'error');
+                } finally {
+                    showLoading(false);
+                }
+            },
+
+            /**
+             * Gestisce l'annullamento da parte dell'utente
+             */
+            onCancel: function(data) {
+                console.log('Pagamento PayPal annullato:', data);
+                showNotification('Pagamento annullato. Puoi riprovare quando vuoi.', 'warning');
+            },
+
+            /**
+             * Gestisce gli errori
+             */
+            onError: function(err) {
+                console.error('Errore PayPal:', err);
+                showNotification('Si è verificato un errore con PayPal. Riprova o scegli un altro metodo.', 'error');
+            }
+
+        }).render('#paypal-button-container');
+
+        paypalButtonsRendered = true;
+        console.log('PayPal Buttons inizializzato con successo');
+
+    } catch (error) {
+        console.error('Errore inizializzazione PayPal:', error);
+        showNotification('Impossibile caricare PayPal. Ricarica la pagina.', 'error');
+
+        // Disabilita l'opzione PayPal
+        const paypalBtn = document.querySelector('[data-method="paypal"]');
+        if (paypalBtn) {
+            paypalBtn.disabled = true;
+            paypalBtn.title = 'PayPal non disponibile';
         }
     }
 }
@@ -433,7 +704,8 @@ async function handleFormSubmit(e) {
                 await processStripePayment();
                 break;
             case 'paypal':
-                showNotification('Utilizza il pulsante PayPal per procedere', 'warning');
+                // PayPal usa i suoi bottoni, non il form submit
+                showNotification('Clicca sul pulsante giallo PayPal qui sopra per procedere', 'warning');
                 showLoading(false);
                 break;
             case 'iban':
@@ -458,17 +730,38 @@ async function processStripePayment() {
         throw new Error('Sistema di pagamento non inizializzato. Ricarica la pagina.');
     }
 
+    // SICUREZZA: Validazione rigorosa email prima di passare a Stripe SDK
+    // Defense-in-depth: anche se validateBookingData() ha già controllato,
+    // verifichiamo di nuovo per prevenire race condition o manipolazioni
+    const emailValidation = validateEmail(bookingData?.email);
+
+    if (!emailValidation.valid) {
+        console.error('Email validation failed:', emailValidation.reason);
+
+        // Mostra errore chiaro all'utente
+        const errorElement = document.getElementById('card-errors');
+        if (errorElement) {
+            errorElement.textContent = 'Email non valida. Torna alla prenotazione e inserisci un\'email corretta.';
+            errorElement.classList.add('show');
+        }
+
+        throw new Error(`Impossibile procedere: ${emailValidation.reason}. Torna alla pagina di prenotazione e verifica i tuoi dati.`);
+    }
+
+    // Usa l'email validata e sanitizzata
+    const validatedEmail = emailValidation.email;
+
     // Stripe gestisce tutti i dati carta nel loro iframe sicuro
     // Noi riceviamo solo il risultato (successo/errore)
     const { error, paymentIntent } = await stripe.confirmPayment({
         elements: cardElement._elements, // L'elements object
         confirmParams: {
             return_url: window.location.origin + '/payment-success.html',
-            receipt_email: bookingData.email,
+            receipt_email: validatedEmail,
             payment_method_data: {
                 billing_details: {
                     name: bookingData.name,
-                    email: bookingData.email
+                    email: validatedEmail
                 }
             }
         },
@@ -626,6 +919,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Inizializza Stripe Elements (per pagamento carta)
     await initializeStripe();
+
+    // Inizializza PayPal Buttons
+    await initializePayPal();
 
     // Event listeners metodi pagamento
     document.querySelectorAll('.method-btn').forEach(btn => {

@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Database
+bookings.json
+*.db
+*.sqlite
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Temp
+tmp/
+temp/
+.cache/
+
+# Build
+dist/
+build/

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxury Hotel - Prenotazioni Online</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:wght@400;500;600&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Header/Navbar -->
+    <header class="header">
+        <div class="container">
+            <div class="navbar">
+                <div class="logo">
+                    <i class="fas fa-hotel"></i> Luxury Hotel
+                </div>
+                <nav class="nav">
+                    <a href="#home">Home</a>
+                    <a href="#rooms">Stanze</a>
+                    <a href="#booking">Prenota</a>
+                    <a href="#contact">Contatti</a>
+                </nav>
+                <button class="menu-toggle" id="menuToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-background">
+            <img src="https://images.unsplash.com/photo-1578894691223-3b5b9ffd3fc2?auto=format&fit=crop&w=1400&q=80" alt="Luxury Hotel Room">
+        </div>
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+            <h1 class="hero-title">Benvenuto nel Nostro Albergo</h1>
+            <p class="hero-subtitle">Scopri il lusso e il comfort in una location straordinaria</p>
+            <button class="btn btn-primary" onclick="document.getElementById('booking').scrollIntoView({behavior: 'smooth'})">Prenota Ora</button>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about">
+        <div class="container">
+            <h2>Chi Siamo</h2>
+            <div class="about-grid">
+                <div class="about-card">
+                    <div class="icon-box">
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <h3>5 Stelle</h3>
+                    <p>Struttura di lusso con i migliori servizi</p>
+                </div>
+                <div class="about-card">
+                    <div class="icon-box">
+                        <i class="fas fa-bed"></i>
+                    </div>
+                    <h3>50 Stanze</h3>
+                    <p>Camere comode e ben arredate</p>
+                </div>
+                <div class="about-card">
+                    <div class="icon-box">
+                        <i class="fas fa-utensils"></i>
+                    </div>
+                    <h3>Ristorante</h3>
+                    <p>Cucina gourmet con chef stellato</p>
+                </div>
+                <div class="about-card">
+                    <div class="icon-box">
+                        <i class="fas fa-spa"></i>
+                    </div>
+                    <h3>Spa</h3>
+                    <p>Centro benessere completo</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Rooms Section -->
+    <section id="rooms" class="rooms">
+        <div class="container">
+            <h2>Le Nostre Stanze</h2>
+            <div class="rooms-grid">
+                <div class="room-card">
+                    <div class="room-image-wrapper">
+                        <img class="room-image" src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=500&q=60" alt="Camera Standard">
+                        <div class="room-badge">Standard</div>
+                    </div>
+                    <div class="room-info">
+                        <h3>Camera Standard</h3>
+                        <p>Perfetta per coppie o viaggi singoli</p>
+                        <div class="room-features">
+                            <span><i class="fas fa-users"></i> 2 persone</span>
+                            <span><i class="fas fa-ruler-combined"></i> 25 m²</span>
+                        </div>
+                        <div class="room-amenities">
+                            <span class="amenity"><i class="fas fa-wifi"></i></span>
+                            <span class="amenity"><i class="fas fa-tv"></i></span>
+                            <span class="amenity"><i class="fas fa-bath"></i></span>
+                        </div>
+                        <div class="room-price">€ <span>120</span>/notte</div>
+                        <button class="btn btn-secondary" onclick="selectRoom('Standard', 120)">Seleziona</button>
+                    </div>
+                </div>
+
+                <div class="room-card">
+                    <div class="room-image-wrapper">
+                        <img class="room-image" src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=500&q=60" alt="Camera Deluxe">
+                        <div class="room-badge">Deluxe</div>
+                    </div>
+                    <div class="room-info">
+                        <h3>Camera Deluxe</h3>
+                        <p>Spaziosa con vista panoramica</p>
+                        <div class="room-features">
+                            <span><i class="fas fa-users"></i> 3 persone</span>
+                            <span><i class="fas fa-ruler-combined"></i> 40 m²</span>
+                        </div>
+                        <div class="room-amenities">
+                            <span class="amenity"><i class="fas fa-wifi"></i></span>
+                            <span class="amenity"><i class="fas fa-tv"></i></span>
+                            <span class="amenity"><i class="fas fa-bath"></i></span>
+                            <span class="amenity"><i class="fas fa-sun"></i></span>
+                        </div>
+                        <div class="room-price">€ <span>180</span>/notte</div>
+                        <button class="btn btn-secondary" onclick="selectRoom('Deluxe', 180)">Seleziona</button>
+                    </div>
+                </div>
+
+                <div class="room-card">
+                    <div class="room-image-wrapper">
+                        <img class="room-image" src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=500&q=60" alt="Suite Lussuosa">
+                        <div class="room-badge premium">Lussuosa</div>
+                    </div>
+                    <div class="room-info">
+                        <h3>Suite Lussuosa</h3>
+                        <p>Lussuosa con jacuzzi privata</p>
+                        <div class="room-features">
+                            <span><i class="fas fa-users"></i> 4 persone</span>
+                            <span><i class="fas fa-ruler-combined"></i> 60 m²</span>
+                        </div>
+                        <div class="room-amenities">
+                            <span class="amenity"><i class="fas fa-wifi"></i></span>
+                            <span class="amenity"><i class="fas fa-tv"></i></span>
+                            <span class="amenity"><i class="fas fa-bath"></i></span>
+                            <span class="amenity"><i class="fas fa-hot-tub"></i></span>
+                            <span class="amenity"><i class="fas fa-sun"></i></span>
+                        </div>
+                        <div class="room-price">€ <span>280</span>/notte</div>
+                        <button class="btn btn-secondary" onclick="selectRoom('Suite', 280)">Seleziona</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Booking Section -->
+    <section id="booking" class="booking">
+        <div class="container">
+            <h2>Prenota la Tua Stanza</h2>
+            <div class="booking-container">
+                <form id="bookingForm" class="booking-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="roomType">Tipo di Stanza *</label>
+                            <select id="roomType" required>
+                                <option value="">Seleziona una stanza</option>
+                                <option value="Standard">Standard - €120/notte</option>
+                                <option value="Deluxe">Deluxe - €180/notte</option>
+                                <option value="Suite">Suite - €280/notte</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="checkIn">Check-in *</label>
+                            <input type="date" id="checkIn" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="checkOut">Check-out *</label>
+                            <input type="date" id="checkOut" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="guests">Numero Ospiti *</label>
+                            <select id="guests" required>
+                                <option value="">Seleziona</option>
+                                <option value="1">1 ospite</option>
+                                <option value="2">2 ospiti</option>
+                                <option value="3">3 ospiti</option>
+                                <option value="4">4 ospiti</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group full">
+                            <label for="name">Nome Completo *</label>
+                            <input type="text" id="name" placeholder="Mario Rossi" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email">Email *</label>
+                            <input type="email" id="email" placeholder="mario@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="phone">Telefono *</label>
+                            <input type="tel" id="phone" placeholder="+39 123 456 7890" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group full">
+                            <label for="requests">Richieste Speciali</label>
+                            <textarea id="requests" placeholder="Es. letto matrimoniale, camera silenziosa..." rows="3"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="price-summary">
+                        <div class="summary-row">
+                            <span>Notti:</span>
+                            <span id="nightsCount">0</span>
+                        </div>
+                        <div class="summary-row">
+                            <span>Prezzo per notte:</span>
+                            <span id="pricePerNight">€0</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span>Totale:</span>
+                            <span id="totalPrice">€0</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-large" id="submitBtn">
+                        <span class="btn-text">Conferma Prenotazione</span>
+                        <span class="btn-loader" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                        </span>
+                    </button>
+                </form>
+
+                <div class="booking-sidebar">
+                    <div class="booking-info">
+                        <h3><i class="fas fa-check-circle"></i> Vantaggi della Prenotazione</h3>
+                        <ul>
+                            <li><i class="fas fa-check"></i> Miglior prezzo garantito</li>
+                            <li><i class="fas fa-check"></i> Cancellazione gratuita fino a 24h</li>
+                            <li><i class="fas fa-check"></i> Colazione inclusa</li>
+                            <li><i class="fas fa-check"></i> Wi-Fi gratuito</li>
+                            <li><i class="fas fa-check"></i> Assistenza 24/7</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Review Section -->
+    <section class="reviews">
+        <div class="container">
+            <h2>Cosa Dicono i Nostri Ospiti</h2>
+            <div class="reviews-grid">
+                <div class="review-card">
+                    <div class="stars">
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <p>"Una struttura meravigliosa, staff cortese e servizio eccellente!"</p>
+                    <strong>Giovanni M.</strong>
+                </div>
+                <div class="review-card">
+                    <div class="stars">
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <p>"Perfetto per una fuga romantica. Consigliatissimo!"</p>
+                    <strong>Laura G.</strong>
+                </div>
+                <div class="review-card">
+                    <div class="stars">
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <p>"Ambiente lussuoso e tranquillo. Tornerò sicuramente!"</p>
+                    <strong>Marco T.</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2>Contatti</h2>
+            <div class="contact-grid">
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </div>
+                    <h3>Indirizzo</h3>
+                    <p>Via Lusso 123, 20100 Milano</p>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-phone"></i>
+                    </div>
+                    <h3>Telefono</h3>
+                    <p>+39 02 1234 5678</p>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-envelope"></i>
+                    </div>
+                    <h3>Email</h3>
+                    <p>info@luxuryhotel.it</p>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h3>Orari</h3>
+                    <p>24/7</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Luxury Hotel. Tutti i diritti riservati.</p>
+            <div class="social-links">
+                <a href="#"><i class="fab fa-facebook"></i></a>
+                <a href="#"><i class="fab fa-instagram"></i></a>
+                <a href="#"><i class="fab fa-twitter"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Notification -->
+    <div id="notification" class="notification"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

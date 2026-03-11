@@ -4,6 +4,7 @@
  */
 
 // ========== CONFIGURAZIONE ==========
+const DEBUG = false; // Impostare a true solo in sviluppo
 const API_URL = './api/admin.php';
 const AUTH_API = './api/auth.php';
 const BOOKINGS_API = './api/bookings.php';
@@ -50,7 +51,7 @@ async function checkAuth() {
         return true;
 
     } catch (error) {
-        console.error('Auth check failed:', error);
+        if (DEBUG) console.error('Auth check failed:', error);
         window.location.href = 'login.html';
         return false;
     }
@@ -62,7 +63,7 @@ async function logout() {
             credentials: 'include'
         });
     } catch (error) {
-        console.error('Logout error:', error);
+        if (DEBUG) console.error('Logout error:', error);
     }
     window.location.href = 'login.html';
 }
@@ -223,7 +224,7 @@ async function loadDashboardData() {
             initCharts(data);
         }
     } catch (error) {
-        console.error('Errore caricamento dashboard:', error);
+        if (DEBUG) console.error('Errore caricamento dashboard:', error);
         // Fallback: carica da bookings API
         loadFromBookingsAPI();
     }
@@ -241,7 +242,7 @@ async function loadFromBookingsAPI() {
             initChartsFromBookings(allBookings);
         }
     } catch (error) {
-        console.error('Errore caricamento bookings:', error);
+        if (DEBUG) console.error('Errore caricamento bookings:', error);
         showNotification('Errore nel caricamento dei dati', 'error');
     }
 }
@@ -258,7 +259,8 @@ async function loadAllBookings() {
             renderBookingsTable();
         }
     } catch (error) {
-        console.error('Errore caricamento prenotazioni:', error);
+        if (DEBUG) console.error('Errore caricamento prenotazioni:', error);
+        showNotification('Errore nel caricamento prenotazioni', 'error');
     }
 }
 
@@ -582,7 +584,7 @@ function handleTableAction(e) {
 
     // Valida formato booking_id prima di usarlo
     if (bookingId && !/^BK\d{14}_[a-f0-9]{8}$/i.test(bookingId)) {
-        console.warn('ID prenotazione non valido');
+        if (DEBUG) console.warn('ID prenotazione non valido');
         return;
     }
 

@@ -31,15 +31,33 @@ if (file_exists($envFile)) {
     }
 }
 
-// Configurazione database da variabili d'ambiente (con fallback solo per sviluppo locale)
+// Configurazione database da variabili d'ambiente (SENZA fallback insicuri)
 defined('DB_HOST') || define('DB_HOST', $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost');
-defined('DB_USER') || define('DB_USER', $_ENV['DB_USER'] ?? getenv('DB_USER') ?: '');
+defined('DB_USER') || define('DB_USER', $_ENV['DB_USER'] ?? getenv('DB_USER') ?: null);
 defined('DB_PASS') || define('DB_PASS', $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: '');
-defined('DB_NAME') || define('DB_NAME', $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'luxury_hotel');
+defined('DB_NAME') || define('DB_NAME', $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: null);
 
-// Verifica che le credenziali siano configurate
-if (empty(DB_USER)) {
-    error_log('SECURITY WARNING: DB_USER non configurato. Configura le variabili d\'ambiente nel file .env');
+// FAIL-SAFE: Blocca l'applicazione se le credenziali obbligatorie mancano
+if (empty(DB_USER) || DB_USER === null) {
+    $errorMsg = 'FATAL: Impossibile avviare l\'applicazione - DB_USER non configurato. Configura il file .env';
+    error_log($errorMsg);
+    if (strpos($_SERVER['REQUEST_URI'] ?? '', '/api/') !== false) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Errore di configurazione server']);
+    }
+    exit(1);
+}
+
+if (empty(DB_NAME) || DB_NAME === null) {
+    $errorMsg = 'FATAL: Impossibile avviare l\'applicazione - DB_NAME non configurato. Configura il file .env';
+    error_log($errorMsg);
+    if (strpos($_SERVER['REQUEST_URI'] ?? '', '/api/') !== false) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Errore di configurazione server']);
+    }
+    exit(1);
 }
 
 // Variabile globale per connessione
@@ -67,8 +85,8 @@ try {
         throw new Exception('Errore nel setting charset: ' . $conn->error);
     }
 
-    // Auto-setup tabelle
-    runAutoMigrations($conn);
+    // NOTA: Le migrazioni NON vengono più eseguite automaticamente ad ogni richiesta.
+    // Per il setup iniziale o aggiornamenti schema, eseguire: php install.php --migrate
 
 } catch (Exception $e) {
     error_log('Database Connection Error: ' . $e->getMessage());

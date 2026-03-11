@@ -1,9 +1,397 @@
 <?php
 /**
  * LUXURY HOTEL - Installazione Automatica
- * Apri questo file nel browser per configurare tutto
+ *
+ * USO VIA BROWSER: Apri questo file nel browser per la configurazione guidata
+ *
+ * USO VIA CLI:
+ *   php install.php --migrate              # Esegue solo le migrazioni (richiede .env configurato)
+ *   php install.php --setup                # Setup interattivo completo da CLI
+ *   php install.php --check                # Verifica stato installazione
  */
 
+// ========== MODALITÀ CLI ==========
+if (php_sapi_name() === 'cli') {
+    runCLI($argv);
+    exit(0);
+}
+
+/**
+ * Gestisce l'esecuzione da linea di comando
+ */
+function runCLI($argv) {
+    $command = $argv[1] ?? '--help';
+
+    switch ($command) {
+        case '--migrate':
+            cliMigrate();
+            break;
+        case '--setup':
+            cliSetup();
+            break;
+        case '--check':
+            cliCheck();
+            break;
+        case '--help':
+        default:
+            cliHelp();
+            break;
+    }
+}
+
+/**
+ * Mostra help CLI
+ */
+function cliHelp() {
+    echo "\n";
+    echo "=== LUXURY HOTEL - Installazione ===\n\n";
+    echo "Comandi disponibili:\n";
+    echo "  --migrate    Esegue le migrazioni database (richiede .env configurato)\n";
+    echo "  --setup      Setup interattivo completo\n";
+    echo "  --check      Verifica stato installazione\n";
+    echo "  --help       Mostra questo messaggio\n";
+    echo "\n";
+}
+
+/**
+ * Verifica stato installazione
+ */
+function cliCheck() {
+    echo "\n=== Verifica installazione ===\n\n";
+
+    // Verifica .env
+    $envFile = __DIR__ . '/.env';
+    if (file_exists($envFile)) {
+        echo "[OK] File .env trovato\n";
+    } else {
+        echo "[!] File .env non trovato - esegui --setup\n";
+        return;
+    }
+
+    // Carica variabili
+    loadEnvFile($envFile);
+
+    $host = $_ENV['DB_HOST'] ?? 'localhost';
+    $user = $_ENV['DB_USER'] ?? '';
+    $pass = $_ENV['DB_PASS'] ?? '';
+    $dbname = $_ENV['DB_NAME'] ?? 'luxury_hotel';
+
+    // Test connessione
+    try {
+        $conn = @new mysqli($host, $user, $pass);
+        if ($conn->connect_error) {
+            echo "[!] Connessione MySQL fallita: {$conn->connect_error}\n";
+            return;
+        }
+        echo "[OK] Connessione MySQL\n";
+
+        // Verifica database
+        $result = $conn->query("SHOW DATABASES LIKE '$dbname'");
+        if ($result && $result->num_rows > 0) {
+            echo "[OK] Database '$dbname' esiste\n";
+            $conn->select_db($dbname);
+
+            // Verifica tabelle
+            $tables = ['prenotazioni', 'payments', 'admin_users', 'login_attempts'];
+            foreach ($tables as $table) {
+                $result = $conn->query("SHOW TABLES LIKE '$table'");
+                if ($result && $result->num_rows > 0) {
+                    echo "[OK] Tabella '$table'\n";
+                } else {
+                    echo "[!] Tabella '$table' mancante - esegui --migrate\n";
+                }
+            }
+        } else {
+            echo "[!] Database '$dbname' non esiste - esegui --migrate\n";
+        }
+
+        $conn->close();
+    } catch (Exception $e) {
+        echo "[!] Errore: {$e->getMessage()}\n";
+    }
+
+    echo "\n";
+}
+
+/**
+ * Esegue migrazioni da CLI
+ */
+function cliMigrate() {
+    echo "\n=== Esecuzione migrazioni ===\n\n";
+
+    $envFile = __DIR__ . '/.env';
+    if (!file_exists($envFile)) {
+        echo "[ERRORE] File .env non trovato.\n";
+        echo "Crea il file .env con le credenziali database o esegui --setup\n\n";
+        exit(1);
+    }
+
+    loadEnvFile($envFile);
+
+    $host = $_ENV['DB_HOST'] ?? 'localhost';
+    $user = $_ENV['DB_USER'] ?? '';
+    $pass = $_ENV['DB_PASS'] ?? '';
+    $dbname = $_ENV['DB_NAME'] ?? 'luxury_hotel';
+
+    if (empty($user)) {
+        echo "[ERRORE] DB_USER non configurato nel file .env\n\n";
+        exit(1);
+    }
+
+    echo "Connessione a $host...\n";
+
+    try {
+        $conn = new mysqli($host, $user, $pass);
+        if ($conn->connect_error) {
+            throw new Exception('Connessione fallita: ' . $conn->connect_error);
+        }
+
+        // Crea database
+        echo "Creazione database '$dbname'... ";
+        $conn->query("CREATE DATABASE IF NOT EXISTS `$dbname` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        echo "OK\n";
+
+        $conn->select_db($dbname);
+
+        // Esegui migrazioni (usa le funzioni esistenti)
+        echo "Creazione tabella 'prenotazioni'... ";
+        createPrenotazioniTableCLI($conn);
+        echo "OK\n";
+
+        echo "Creazione tabella 'payments'... ";
+        createPaymentsTableCLI($conn);
+        echo "OK\n";
+
+        echo "Creazione tabella 'admin_users'... ";
+        createAdminUsersTableCLI($conn);
+        echo "OK\n";
+
+        echo "Creazione tabella 'login_attempts'... ";
+        createLoginAttemptsTableCLI($conn);
+        echo "OK\n";
+
+        echo "Creazione indici... ";
+        createIndexesCLI($conn);
+        echo "OK\n";
+
+        $conn->close();
+
+        echo "\n[SUCCESSO] Migrazioni completate!\n\n";
+
+    } catch (Exception $e) {
+        echo "\n[ERRORE] {$e->getMessage()}\n\n";
+        exit(1);
+    }
+}
+
+/**
+ * Setup interattivo da CLI
+ */
+function cliSetup() {
+    echo "\n=== Setup interattivo ===\n\n";
+
+    // Leggi input da stdin
+    echo "Host MySQL [localhost]: ";
+    $host = trim(fgets(STDIN)) ?: 'localhost';
+
+    echo "Utente MySQL [root]: ";
+    $user = trim(fgets(STDIN)) ?: 'root';
+
+    echo "Password MySQL []: ";
+    $pass = trim(fgets(STDIN)) ?: '';
+
+    echo "Nome database [luxury_hotel]: ";
+    $dbname = trim(fgets(STDIN)) ?: 'luxury_hotel';
+
+    // Test connessione
+    echo "\nTest connessione... ";
+    try {
+        $conn = @new mysqli($host, $user, $pass);
+        if ($conn->connect_error) {
+            echo "FALLITO\n";
+            echo "[ERRORE] {$conn->connect_error}\n\n";
+            exit(1);
+        }
+        echo "OK\n";
+        $conn->close();
+    } catch (Exception $e) {
+        echo "FALLITO\n";
+        echo "[ERRORE] {$e->getMessage()}\n\n";
+        exit(1);
+    }
+
+    // Salva .env
+    echo "Salvataggio .env... ";
+    $envContent = "# Configurazione Database
+DB_HOST=$host
+DB_USER=$user
+DB_PASS=$pass
+DB_NAME=$dbname
+
+# Debug (false in produzione)
+DEBUG=false
+";
+    if (file_put_contents(__DIR__ . '/.env', $envContent)) {
+        echo "OK\n";
+    } else {
+        echo "FALLITO\n";
+        exit(1);
+    }
+
+    // Esegui migrazioni
+    echo "\nEsecuzione migrazioni...\n";
+    $_ENV['DB_HOST'] = $host;
+    $_ENV['DB_USER'] = $user;
+    $_ENV['DB_PASS'] = $pass;
+    $_ENV['DB_NAME'] = $dbname;
+    cliMigrate();
+
+    // Crea admin
+    echo "\n=== Creazione amministratore ===\n";
+    echo "Username [admin]: ";
+    $adminUser = trim(fgets(STDIN)) ?: 'admin';
+
+    echo "Email: ";
+    $adminEmail = trim(fgets(STDIN));
+    if (empty($adminEmail)) {
+        echo "[ERRORE] Email obbligatoria\n\n";
+        exit(1);
+    }
+
+    echo "Password: ";
+    $adminPass = trim(fgets(STDIN));
+    if (strlen($adminPass) < 6) {
+        echo "[ERRORE] Password troppo corta (min 6 caratteri)\n\n";
+        exit(1);
+    }
+
+    $result = createAdmin($host, $user, $pass, $dbname, $adminUser, $adminEmail, $adminPass);
+    if ($result['success']) {
+        echo "\n[SUCCESSO] Amministratore creato!\n";
+    } else {
+        echo "\n[ERRORE] {$result['error']}\n";
+    }
+
+    echo "\n=== Installazione completata ===\n";
+    echo "IMPORTANTE: Rimuovi o proteggi install.php!\n\n";
+}
+
+/**
+ * Carica variabili da file .env
+ */
+function loadEnvFile($envFile) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0) continue;
+        if (strpos($line, '=') !== false) {
+            list($name, $value) = explode('=', $line, 2);
+            $name = trim($name);
+            $value = trim(trim($value), '"\'');
+            if (!empty($name)) {
+                $_ENV[$name] = $value;
+                putenv("$name=$value");
+            }
+        }
+    }
+}
+
+// Funzioni di migrazione per CLI (versioni standalone)
+function createPrenotazioniTableCLI($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS prenotazioni (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        booking_id VARCHAR(50) UNIQUE NOT NULL,
+        room_type ENUM('Standard', 'Deluxe', 'Suite') NOT NULL,
+        check_in DATE NOT NULL,
+        check_out DATE NOT NULL,
+        guests INT NOT NULL DEFAULT 1,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) NOT NULL,
+        requests TEXT,
+        nights INT NOT NULL DEFAULT 1,
+        price_per_night DECIMAL(10,2) NOT NULL,
+        total_price DECIMAL(10,2) NOT NULL,
+        status ENUM('pending', 'confirmed', 'paid', 'cancelled') DEFAULT 'pending',
+        payment_status ENUM('pending', 'processing', 'completed', 'failed', 'pending_transfer', 'refunded') DEFAULT 'pending',
+        payment_method ENUM('card', 'paypal', 'iban') NULL,
+        transaction_id VARCHAR(100) NULL,
+        paid_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    if (!$conn->query($sql)) throw new Exception($conn->error);
+}
+
+function createPaymentsTableCLI($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS payments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        booking_id VARCHAR(50) NOT NULL,
+        transaction_id VARCHAR(100) UNIQUE NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        method ENUM('card', 'paypal', 'iban') NOT NULL,
+        status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'pending',
+        card_last_four VARCHAR(4) NULL,
+        card_brand VARCHAR(20) NULL,
+        paypal_email VARCHAR(255) NULL,
+        error_message TEXT NULL,
+        ip_address VARCHAR(45) NULL,
+        user_agent TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_booking_id (booking_id),
+        INDEX idx_transaction_id (transaction_id),
+        INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    if (!$conn->query($sql)) throw new Exception($conn->error);
+}
+
+function createAdminUsersTableCLI($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS admin_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        status ENUM('pending', 'active', 'rejected', 'suspended') DEFAULT 'pending',
+        email_verified BOOLEAN DEFAULT FALSE,
+        verification_token VARCHAR(100) NULL,
+        token_expires_at TIMESTAMP NULL,
+        approved_by INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP NULL,
+        INDEX idx_email (email),
+        INDEX idx_status (status),
+        INDEX idx_verification_token (verification_token)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    if (!$conn->query($sql)) throw new Exception($conn->error);
+}
+
+function createLoginAttemptsTableCLI($conn) {
+    $sql = "CREATE TABLE IF NOT EXISTS login_attempts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ip_address VARCHAR(45) NOT NULL,
+        username VARCHAR(50) NULL,
+        attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        success BOOLEAN DEFAULT FALSE,
+        INDEX idx_ip (ip_address),
+        INDEX idx_attempted_at (attempted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    if (!$conn->query($sql)) throw new Exception($conn->error);
+}
+
+function createIndexesCLI($conn) {
+    $indexes = [
+        "CREATE INDEX idx_payment_status ON prenotazioni(payment_status)",
+        "CREATE INDEX idx_booking_id ON prenotazioni(booking_id)",
+        "CREATE INDEX idx_check_in ON prenotazioni(check_in)",
+        "CREATE INDEX idx_status ON prenotazioni(status)",
+        "CREATE INDEX idx_email ON prenotazioni(email)"
+    ];
+    foreach ($indexes as $sql) {
+        @$conn->query($sql); // Ignora se già esistono
+    }
+}
+
+// ========== MODALITÀ BROWSER ==========
 session_start();
 
 // Se il form è stato inviato

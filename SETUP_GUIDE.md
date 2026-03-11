@@ -88,7 +88,7 @@ mysql -u root -p luxury_hotel < database-setup.sql
 ### 1. Copia file .env
 
 ```bash
-# Dalla cartella progetto-AI
+# Dalla cartella Booking-APP-Luxury
 cp .env.example .env
 
 # Su Windows (PowerShell)
@@ -132,7 +132,7 @@ if (isset($conn) && !$conn->connect_error) {
 ?>
 ```
 
-Apri nel browser: `http://localhost/progetto-AI/test-connection.php`
+Apri nel browser: `http://localhost/Booking-APP-Luxury/test-connection.php`
 
 ## 🚀 Passo 3: Avvio Applicazione
 
@@ -144,19 +144,19 @@ Apri nel browser: `http://localhost/progetto-AI/test-connection.php`
 # macOS: sudo apachectl start
 # Linux: sudo systemctl start apache2
 
-# 2. Copia cartella progetto-AI in htdocs/
+# 2. Copia cartella Booking-APP-Luxury in htdocs/
 # Windows: C:\xampp\htdocs\
 # macOS: /Applications/MAMP/htdocs/
 # Linux: /var/www/html/
 
 # 3. Apri browser
-http://localhost/progetto-AI/index.html
+http://localhost/Booking-APP-Luxury/index.html
 ```
 
 ### Opzione 2: Usando PHP Built-in Server (Sviluppo)
 
 ```bash
-# Dalla cartella progetto-AI
+# Dalla cartella Booking-APP-Luxury
 php -S localhost:8000
 
 # Apri browser
@@ -166,7 +166,7 @@ http://localhost:8000/index.html
 ### Opzione 3: Usando Nginx (Avanzato)
 
 ```bash
-# Configura nginx.conf per puntare alla cartella progetto-AI
+# Configura nginx.conf per puntare alla cartella Booking-APP-Luxury
 # Riavvia Nginx
 sudo systemctl restart nginx
 
@@ -178,7 +178,7 @@ http://localhost/index.html
 
 ### 1. Test Frontend
 
-Apri `http://localhost/progetto-AI/index.html` e verifica:
+Apri `http://localhost/Booking-APP-Luxury/index.html` e verifica:
 
 - ✓ Pagina carica completamente
 - ✓ Immagini visibili
@@ -260,7 +260,7 @@ Soluzione:
 2. Verifica che config.php esista nella root
 
 3. Prova accesso diretto:
-   http://localhost/progetto-AI/api/bookings.php
+   http://localhost/Booking-APP-Luxury/api/bookings.php
    Dovrebbe dare JSON response o errore di validazione
 ```
 
@@ -280,7 +280,7 @@ Soluzione:
 1. Apri Console (F12) e controlla errori
 2. Verifica che api/bookings.php?action=booked-dates funzioni
 3. Testa direttamente nel browser:
-   http://localhost/progetto-AI/api/bookings.php?action=booked-dates
+   http://localhost/Booking-APP-Luxury/api/bookings.php?action=booked-dates
    Dovrebbe ritornare JSON con dates
 ```
 
@@ -298,10 +298,10 @@ Soluzione:
 
 ```
 Soluzione:
-chmod 755 progetto-AI/
-chmod 755 progetto-AI/api/
+chmod 755 Booking-APP-Luxury/
+chmod 755 Booking-APP-Luxury/api/
 # Se ancora problemi:
-sudo chown -R www-data:www-data progetto-AI/
+sudo chown -R www-data:www-data Booking-APP-Luxury/
 ```
 
 ## 🔒 Security Checklist

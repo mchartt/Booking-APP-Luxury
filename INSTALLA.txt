@@ -21,21 +21,21 @@ Copia TUTTA questa cartella dentro:
   C:\xampp\htdocs\
 
 Avrai quindi:
-  C:\xampp\htdocs\progetto-AI\
+  C:\xampp\htdocs\Booking-APP-Luxury\
 
 
 PASSO 4: Installa il sistema
 ----------------------------
 Apri il browser e vai su:
-  http://localhost/progetto-AI/install.php
+  http://localhost/Booking-APP-Luxury/install.php
 
 Segui la procedura guidata (ci vogliono 2 minuti).
 
 
 PASSO 5: Usa il sito!
 ---------------------
-- Sito pubblico: http://localhost/progetto-AI/
-- Admin: http://localhost/progetto-AI/login.html
+- Sito pubblico: http://localhost/Booking-APP-Luxury/
+- Admin: http://localhost/Booking-APP-Luxury/login.html
 
 
 ============================================
@@ -44,5 +44,5 @@ PASSO 5: Usa il sito!
 
 Problemi? Controlla che:
 1. Apache e MySQL siano verdi in XAMPP
-2. I file siano in C:\xampp\htdocs\progetto-AI\
+2. I file siano in C:\xampp\htdocs\Booking-APP-Luxury\
 3. Il firewall non blocchi le porte 80 e 3306

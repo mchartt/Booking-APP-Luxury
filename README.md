@@ -43,14 +43,14 @@ Se vuoi metterlo direttamente online, salta alla sezione "METTERE ONLINE".
 
 ### Passo 1: Copia i file
 
-Copia TUTTA la cartella `progetto-AI` dentro:
+Copia TUTTA la cartella `Booking-APP-Luxury` dentro:
 ```
 C:\xampp\htdocs\
 ```
 
 Quindi avrai:
 ```
-C:\xampp\htdocs\progetto-AI\
+C:\xampp\htdocs\Booking-APP-Luxury\
     ├── index.html
     ├── admin.html
     ├── api/
@@ -139,7 +139,7 @@ DEBUG=false
 
 1. Assicurati che XAMPP abbia Apache e MySQL accesi (lucette verdi)
 2. Apri il browser
-3. Vai su: **http://localhost/progetto-AI/**
+3. Vai su: **http://localhost/Booking-APP-Luxury/**
 
 Dovresti vedere il sito dell'hotel!
 
@@ -149,7 +149,7 @@ Dovresti vedere il sito dell'hotel!
 
 ### Per i CLIENTI (Sito pubblico)
 
-1. Aprono `http://tuosito.com/` (o `localhost/progetto-AI/`)
+1. Aprono `http://tuosito.com/` (o `localhost/Booking-APP-Luxury/`)
 2. Scelgono una camera cliccando "Prenota Ora"
 3. Compilano il form con date e dati
 4. Cliccano "Conferma Prenotazione"
@@ -158,7 +158,7 @@ Dovresti vedere il sito dell'hotel!
 
 ### Per TE (Admin)
 
-1. Vai su `http://localhost/progetto-AI/login.html`
+1. Vai su `http://localhost/Booking-APP-Luxury/login.html`
 2. **Prima volta?** Clicca "Registrati" e crea un account
 3. Accedi con email e password
 4. Nel pannello admin puoi:
@@ -226,7 +226,7 @@ sudo apt install apache2 php php-mysql mysql-server
 ## STRUTTURA FILE
 
 ```
-progetto-AI/
+Booking-APP-Luxury/
 │
 ├── PAGINE PUBBLICHE
 │   ├── index.html        <- Homepage con camere e form prenotazione

@@ -181,7 +181,7 @@ SELECT 'payments', COUNT(*) FROM payments;
 -- 1. Copia i file del progetto in htdocs
 -- 2. Crea il file .env dalla copia di .env.example
 -- 3. Configura le credenziali database in .env
--- 4. Apri http://localhost/progetto-AI/
+-- 4. Apri http://localhost/Booking-APP-Luxury/
 -- 5. Accedi come admin: admin@hotel.com / password
 -- 6. CAMBIA SUBITO LA PASSWORD!
 -- =====================================================

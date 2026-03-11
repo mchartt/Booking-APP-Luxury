@@ -136,7 +136,7 @@ Crea nuova prenotazione
 ## 📂 Struttura File Progetto
 
 ```
-progetto-AI/
+Booking-APP-Luxury/
 ├── index.html                    # Frontend principale
 ├── styles.css                    # CSS responsive (1588 linee)
 ├── script.js                     # JavaScript avanzato
@@ -172,7 +172,7 @@ cp .env.example .env
 ### 3. Upload e Testa
 ```bash
 # Apri nel browser
-http://localhost/progetto-AI/index.html
+http://localhost/Booking-APP-Luxury/index.html
 # Oppure con PHP server
 php -S localhost:8000
 ```
@@ -258,7 +258,7 @@ Vedi richieste API e risposte
 
 ### Testa API Direttamente
 ```
-http://localhost/progetto-AI/api/bookings.php?action=booked-dates
+http://localhost/Booking-APP-Luxury/api/bookings.php?action=booked-dates
 Dovrebbe ritornare JSON
 ```
 

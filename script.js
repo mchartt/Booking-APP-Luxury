@@ -4,6 +4,7 @@ const API_BASE_URL = '/api';
 // Variabili globali per gestire date prenotate
 let bookedDates = {};
 let selectedRoomType = null;
+let disabledDatesCache = { roomType: null, dates: [] };
 
 // Prezzi e capacità per tipo di stanza
 const roomConfig = {
@@ -11,6 +12,9 @@ const roomConfig = {
     'Deluxe': { price: 180, maxGuests: 3 },
     'Suite': { price: 280, maxGuests: 4 }
 };
+
+// DOM Cache - populate on DOMContentLoaded
+const DOM = {};
 
 // ========== FUNZIONI AUSILIARIE DATE ==========
 /**
@@ -33,12 +37,17 @@ async function fetchBookedDates() {
 }
 
 /**
- * Converte un oggetto di date in un array di stringhe ISO
+ * Converte un oggetto di date in un array di stringhe ISO (con cache)
  */
 function getDisabledDatesArray() {
-    const disabledArray = [];
-    const roomType = document.getElementById('roomType').value;
+    const roomType = DOM.roomType?.value || document.getElementById('roomType').value;
 
+    // Return cached result if room type hasn't changed
+    if (disabledDatesCache.roomType === roomType) {
+        return disabledDatesCache.dates;
+    }
+
+    const disabledArray = [];
     if (roomType && bookedDates[roomType]) {
         bookedDates[roomType].forEach(range => {
             const start = new Date(range.start);
@@ -48,6 +57,9 @@ function getDisabledDatesArray() {
             }
         });
     }
+
+    // Cache the result
+    disabledDatesCache = { roomType, dates: disabledArray };
     return disabledArray;
 }
 
@@ -55,8 +67,8 @@ function getDisabledDatesArray() {
  * Mostra le date occupate nella UI
  */
 function displayBookedDatesInfo() {
-    const roomType = document.getElementById('roomType').value;
-    const container = document.getElementById('bookedDatesInfo');
+    const roomType = (DOM.roomType || document.getElementById('roomType')).value;
+    const container = DOM.bookedDatesInfo || document.getElementById('bookedDatesInfo');
 
     if (!container) return;
 
@@ -81,12 +93,13 @@ function displayBookedDatesInfo() {
  * Aggiorna gli attributi dei date picker per disabilitare date prenotate
  */
 function updateDatePickerDisabledDates() {
-    const checkInInput = document.getElementById('checkIn');
-    const checkOutInput = document.getElementById('checkOut');
+    const checkInInput = DOM.checkIn || document.getElementById('checkIn');
+    const checkOutInput = DOM.checkOut || document.getElementById('checkOut');
     const disabledDates = getDisabledDatesArray();
+    const disabledJSON = JSON.stringify(disabledDates);
 
-    checkInInput.dataset.disabledDates = JSON.stringify(disabledDates);
-    checkOutInput.dataset.disabledDates = JSON.stringify(disabledDates);
+    if (checkInInput) checkInInput.dataset.disabledDates = disabledJSON;
+    if (checkOutInput) checkOutInput.dataset.disabledDates = disabledJSON;
 }
 
 /**
@@ -145,9 +158,12 @@ document.querySelectorAll('.nav a').forEach(link => {
 
 // ========== FUNZIONI CAMERE ==========
 function selectRoom(roomType, price) {
-    const roomTypeSelect = document.getElementById('roomType');
+    const roomTypeSelect = DOM.roomType || document.getElementById('roomType');
     roomTypeSelect.value = roomType;
     selectedRoomType = roomType;
+
+    // Invalidate cache when room changes
+    disabledDatesCache = { roomType: null, dates: [] };
 
     // Scroll con effetto
     scrollToSection('booking');
@@ -165,8 +181,9 @@ function selectRoom(roomType, price) {
 
 // ========== GESTIONE OSPITI ==========
 function updateGuestsOptions() {
-    const roomType = document.getElementById('roomType').value;
-    const guestsSelect = document.getElementById('guests');
+    const roomTypeEl = DOM.roomType || document.getElementById('roomType');
+    const guestsSelect = DOM.guests || document.getElementById('guests');
+    const roomType = roomTypeEl.value;
     const currentValue = guestsSelect.value;
 
     // Massimo globale è 4, ma dipende dalla stanza
@@ -194,10 +211,13 @@ function updateGuestsOptions() {
 
 // ========== CALCOLO PREZZO ==========
 function updatePriceCalculation() {
-    const checkInInput = document.getElementById('checkIn').value;
-    const checkOutInput = document.getElementById('checkOut').value;
-    const roomType = document.getElementById('roomType').value;
-    const guests = document.getElementById('guests').value;
+    const checkInEl = DOM.checkIn || document.getElementById('checkIn');
+    const checkOutEl = DOM.checkOut || document.getElementById('checkOut');
+    const roomTypeEl = DOM.roomType || document.getElementById('roomType');
+
+    const checkInInput = checkInEl.value;
+    const checkOutInput = checkOutEl.value;
+    const roomType = roomTypeEl.value;
 
     // Aggiorna info stanza se selezionata
     updateRoomSummary(roomType);
@@ -236,7 +256,7 @@ function updatePriceCalculation() {
 }
 
 function updateRoomSummary(roomType) {
-    const roomSummaryEl = document.getElementById('roomSummary');
+    const roomSummaryEl = DOM.roomSummary || document.getElementById('roomSummary');
     if (!roomSummaryEl) return;
 
     if (roomType && roomConfig[roomType]) {
@@ -249,8 +269,8 @@ function updateRoomSummary(roomType) {
 }
 
 function updateDatesSummary(checkIn, checkOut) {
-    const checkInSummary = document.getElementById('checkInSummary');
-    const checkOutSummary = document.getElementById('checkOutSummary');
+    const checkInSummary = DOM.checkInSummary || document.getElementById('checkInSummary');
+    const checkOutSummary = DOM.checkOutSummary || document.getElementById('checkOutSummary');
 
     if (checkInSummary && checkIn) {
         checkInSummary.textContent = checkIn.toLocaleDateString('it-IT', {
@@ -269,40 +289,55 @@ function updateDatesSummary(checkIn, checkOut) {
 }
 
 function resetPriceSummary() {
-    document.getElementById('nightsCount').textContent = '0';
-    document.getElementById('pricePerNight').textContent = '€0';
-    document.getElementById('totalPrice').textContent = '€0';
+    const nightsCount = DOM.nightsCount || document.getElementById('nightsCount');
+    const pricePerNight = DOM.pricePerNight || document.getElementById('pricePerNight');
+    const totalPrice = DOM.totalPrice || document.getElementById('totalPrice');
+    const checkInSummary = DOM.checkInSummary || document.getElementById('checkInSummary');
+    const checkOutSummary = DOM.checkOutSummary || document.getElementById('checkOutSummary');
 
-    const checkInSummary = document.getElementById('checkInSummary');
-    const checkOutSummary = document.getElementById('checkOutSummary');
+    if (nightsCount) nightsCount.textContent = '0';
+    if (pricePerNight) pricePerNight.textContent = '€0';
+    if (totalPrice) totalPrice.textContent = '€0';
     if (checkInSummary) checkInSummary.textContent = '-';
     if (checkOutSummary) checkOutSummary.textContent = '-';
 }
 
 function animateNumberChange(elementId, newValue, prefix = '') {
-    const element = document.getElementById(elementId);
+    const element = DOM[elementId] || document.getElementById(elementId);
+    if (!element) return;
+
     const currentValue = parseInt(element.textContent.replace('€', '')) || 0;
     const difference = newValue - currentValue;
-    const steps = 20;
-    let current = currentValue;
 
-    const interval = setInterval(() => {
-        current += difference / steps;
-        if (difference > 0 && current >= newValue) {
-            current = newValue;
-            clearInterval(interval);
-        } else if (difference < 0 && current <= newValue) {
-            current = newValue;
-            clearInterval(interval);
-        }
+    if (difference === 0) return;
+
+    const duration = 400; // ms
+    const startTime = performance.now();
+
+    function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+    }
+
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easedProgress = easeOutCubic(progress);
+
+        const current = currentValue + (difference * easedProgress);
         element.textContent = prefix + Math.round(current);
-    }, 30);
+
+        if (progress < 1) {
+            requestAnimationFrame(update);
+        }
+    }
+
+    requestAnimationFrame(update);
 }
 
 // ========== GESTIONE DATE ==========
 function handleCheckInChange() {
-    const checkInInput = document.getElementById('checkIn');
-    const checkOutInput = document.getElementById('checkOut');
+    const checkInInput = DOM.checkIn || document.getElementById('checkIn');
+    const checkOutInput = DOM.checkOut || document.getElementById('checkOut');
 
     if (!validateDateNotBooked(checkInInput)) {
         resetPriceSummary();
@@ -326,8 +361,8 @@ function handleCheckInChange() {
 }
 
 function handleCheckOutChange() {
-    const checkInInput = document.getElementById('checkIn');
-    const checkOutInput = document.getElementById('checkOut');
+    const checkInInput = DOM.checkIn || document.getElementById('checkIn');
+    const checkOutInput = DOM.checkOut || document.getElementById('checkOut');
 
     if (!validateDateNotBooked(checkOutInput)) {
         resetPriceSummary();
@@ -515,7 +550,9 @@ function resetFormAndUI() {
 
 // ========== NOTIFICHE ==========
 function showNotification(message, type = 'info') {
-    const notification = document.getElementById('notification');
+    const notification = DOM.notification || document.getElementById('notification');
+    if (!notification) return;
+
     notification.textContent = message;
     notification.className = `notification show ${type}`;
 
@@ -534,15 +571,33 @@ if (phoneInput) {
 
 // ========== INIZIALIZZAZIONE DATE ==========
 document.addEventListener('DOMContentLoaded', function() {
+    // Populate DOM cache
+    DOM.checkIn = document.getElementById('checkIn');
+    DOM.checkOut = document.getElementById('checkOut');
+    DOM.roomType = document.getElementById('roomType');
+    DOM.guests = document.getElementById('guests');
+    DOM.bookingForm = document.getElementById('bookingForm');
+    DOM.submitBtn = document.getElementById('submitBtn');
+    DOM.notification = document.getElementById('notification');
+    DOM.nightsCount = document.getElementById('nightsCount');
+    DOM.pricePerNight = document.getElementById('pricePerNight');
+    DOM.totalPrice = document.getElementById('totalPrice');
+    DOM.roomSummary = document.getElementById('roomSummary');
+    DOM.checkInSummary = document.getElementById('checkInSummary');
+    DOM.checkOutSummary = document.getElementById('checkOutSummary');
+    DOM.bookedDatesInfo = document.getElementById('bookedDatesInfo');
+
     const today = new Date().toISOString().split('T')[0];
-    const checkIn = document.getElementById('checkIn');
-    const checkOut = document.getElementById('checkOut');
 
-    if (checkIn) checkIn.min = today;
-    if (checkOut) checkOut.min = today;
+    if (DOM.checkIn) DOM.checkIn.min = today;
+    if (DOM.checkOut) DOM.checkOut.min = today;
 
-    // Carica le date prenotate
-    fetchBookedDates();
+    // Carica le date prenotate (defer to idle time)
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => fetchBookedDates(), { timeout: 2000 });
+    } else {
+        setTimeout(fetchBookedDates, 100);
+    }
 
     // Inizializza il riepilogo
     resetPriceSummary();
@@ -554,30 +609,75 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ========== ANIMAZIONI AL SCROLL ==========
 function setupScrollAnimations() {
+    // Check for reduced motion preference
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.querySelectorAll('.about-card, .room-card, .review-card, .contact-item, .booking-form, .booking-info').forEach(el => {
+            el.style.opacity = '1';
+        });
+        return;
+    }
+
     const observerOptions = {
         threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
+        rootMargin: '0px 0px -60px 0px'
     };
 
     const observer = new IntersectionObserver(function(entries) {
-        entries.forEach((entry, index) => {
+        entries.forEach((entry) => {
             if (entry.isIntersecting) {
-                setTimeout(() => {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }, index * 100);
+                requestAnimationFrame(() => {
+                    entry.target.classList.add('visible');
+                });
                 observer.unobserve(entry.target);
             }
         });
     }, observerOptions);
 
-    // Applica osservatore
-    document.querySelectorAll('.room-card, .about-card, .review-card, .contact-item, .booking-form, .booking-info').forEach(element => {
-        element.style.opacity = '0';
-        element.style.transform = 'translateY(20px)';
-        element.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+    // Applica animazione ai titoli delle sezioni
+    document.querySelectorAll('.about h2, .rooms h2, .booking h2, .reviews h2, .contact h2').forEach(element => {
+        element.classList.add('reveal');
         observer.observe(element);
     });
+
+    // Applica animazione alle card con stagger
+    document.querySelectorAll('.about-card').forEach((element, index) => {
+        element.classList.add('reveal');
+        element.classList.add(`delay-${(index % 3) + 1}`);
+        observer.observe(element);
+    });
+
+    document.querySelectorAll('.room-card').forEach((element, index) => {
+        element.classList.add('reveal-scale');
+        element.classList.add(`delay-${(index % 3) + 1}`);
+        observer.observe(element);
+    });
+
+    document.querySelectorAll('.review-card').forEach((element, index) => {
+        element.classList.add('reveal');
+        element.classList.add(`delay-${(index % 3) + 1}`);
+        observer.observe(element);
+    });
+
+    document.querySelectorAll('.contact-item').forEach((element, index) => {
+        element.classList.add('reveal');
+        element.classList.add(`delay-${(index % 3) + 1}`);
+        observer.observe(element);
+    });
+
+    // Form e sidebar booking
+    const bookingForm = document.querySelector('.booking-form');
+    const bookingInfo = document.querySelector('.booking-info');
+
+    if (bookingForm) {
+        bookingForm.classList.add('reveal-left');
+        observer.observe(bookingForm);
+    }
+
+    if (bookingInfo) {
+        bookingInfo.classList.add('reveal-right');
+        bookingInfo.classList.add('delay-2');
+        observer.observe(bookingInfo);
+    }
 }
 
 // ========== SMOOTH SCROLL ==========
@@ -606,21 +706,27 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 
 // ========== PARALLAX EFFECT HEADER ==========
 let lastScrollTop = 0;
+let ticking = false;
 const header = document.querySelector('.header');
 
-window.addEventListener('scroll', function() {
-    let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-
-    if (scrollTop > lastScrollTop) {
-        // Scroll down
-        header.style.transform = 'translateY(-100%)';
+function updateHeader(scrollTop) {
+    if (scrollTop > lastScrollTop && scrollTop > 100) {
+        header.style.transform = 'translate3d(0, -100%, 0)';
     } else {
-        // Scroll up
-        header.style.transform = 'translateY(0)';
+        header.style.transform = 'translate3d(0, 0, 0)';
     }
-
     lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
-}, false);
+    ticking = false;
+}
+
+window.addEventListener('scroll', function() {
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+    if (!ticking) {
+        requestAnimationFrame(() => updateHeader(scrollTop));
+        ticking = true;
+    }
+}, { passive: true });
 
 // ========== CARICAMENTO INIZIALE ==========
 // Sistema di prenotazione hotel inizializzato

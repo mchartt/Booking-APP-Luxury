@@ -10,6 +10,73 @@
     box-sizing: border-box;
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
+/* ===== PERFORMANCE OPTIMIZATIONS ===== */
+* {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* GPU acceleration only on hover/active - reduces memory usage */
+.room-card:hover,
+.about-card:hover,
+.review-card:hover,
+.contact-item:hover,
+.btn:hover,
+.btn:active,
+.amenity:hover,
+.icon-box:hover,
+.social-links a:hover {
+    will-change: transform;
+}
+
+/* Fixed elements always on GPU layer */
+.header {
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .reveal,
+    .reveal-left,
+    .reveal-right,
+    .reveal-scale {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}
+
+/* Contain for layout performance */
+.about,
+.rooms,
+.booking,
+.reviews,
+.contact,
+.footer {
+    contain: layout style;
+}
+
+/* Content visibility for off-screen sections - major perf boost */
+.reviews,
+.contact,
+.footer {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 400px;
+}
+
 :root {
     /* ===== PALETTE SOFT MARRONE & PANNA ===== */
     --primary-color: #8b6f47;
@@ -18,6 +85,7 @@
     --accent-color: #e3d3c1;
     --background-cream: #f6f0e6;
     --surface-color: #fdfaf5;
+    --color-panna: #FDFBF7;
     --text-color: #3e3328;
     --muted-text: #6f5b4b;
     --dark-color: #2f241a;
@@ -104,18 +172,22 @@ p {
     line-height: 1.7;
 }
 
-/* ===== HEADER — GLASSMORPHISM ===== */
+/* ===== HEADER — GLASSMORPHISM BEIGE ===== */
 .header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-strong) 100%);
-    color: white;
+    background: rgba(246, 240, 230, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-color);
     padding: 1.2rem 0;
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: var(--shadow-sm);
-    border-bottom: 1px solid var(--color-brown-border);
+    box-shadow: 0 2px 20px rgba(139, 111, 71, 0.08);
+    border-bottom: 1px solid rgba(201, 165, 121, 0.3);
     width: 100vw;
     margin-left: calc(-50vw + 50%);
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                box-shadow 0.3s ease;
 }
 
 .navbar {
@@ -138,7 +210,7 @@ p {
 
 .logo i {
     font-size: 2rem;
-    color: var(--color-brown-primary);
+    color: var(--primary-color);
 }
 
 .nav {
@@ -149,7 +221,7 @@ p {
 .nav a {
     color: var(--color-text-body);
     text-decoration: none;
-    transition: all var(--transition-base);
+    transition: color var(--transition-base), background var(--transition-base), transform var(--transition-base);
     font-weight: 500;
     position: relative;
     font-family: 'Poppins', sans-serif;
@@ -210,6 +282,11 @@ p {
     to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
 @keyframes zoomIn {
     from { transform: scale(1.08); }
     to   { transform: scale(1); }
@@ -229,6 +306,63 @@ p {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.5; }
 }
+
+/* ===== SCROLL REVEAL ANIMATIONS ===== */
+.reveal {
+    opacity: 0;
+    transform: translate3d(0, 40px, 0);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+}
+
+.reveal-left {
+    opacity: 0;
+    transform: translate3d(-40px, 0, 0);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-left.visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+}
+
+.reveal-right {
+    opacity: 0;
+    transform: translate3d(40px, 0, 0);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-right.visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+}
+
+.reveal-scale {
+    opacity: 0;
+    transform: scale3d(0.92, 0.92, 1);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-scale.visible {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+}
+
+/* Stagger delay classes */
+.delay-1 { transition-delay: 0.1s; }
+.delay-2 { transition-delay: 0.2s; }
+.delay-3 { transition-delay: 0.3s; }
+.delay-4 { transition-delay: 0.4s; }
+.delay-5 { transition-delay: 0.5s; }
+.delay-6 { transition-delay: 0.6s; }
 
 /* ===== HERO ===== */
 .hero {
@@ -288,7 +422,9 @@ p {
     font-size: 1.35rem;
     margin-bottom: var(--space-2xl);
     font-family: 'Lora', serif;
-    font-weight: 400;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow: 1px 1px 8px rgba(0, 0, 0, 0.4);
 }
 
 .hero-badge {
@@ -364,14 +500,14 @@ p {
     font-size: 0.9rem;
 }
 
-/* Buttons */
+/* Buttons - Modern Style */
 .btn {
     padding: 14px var(--space-xl);
     border: none;
-    border-radius: var(--radius-xl);
+    border-radius: 999px;
     font-size: 1rem;
     cursor: pointer;
-    transition: transform var(--transition-base), box-shadow var(--transition-base), background var(--transition-base);
+    transition: transform var(--transition-base), opacity var(--transition-base), box-shadow var(--transition-base);
     font-weight: 600;
     display: inline-flex;
     align-items: center;
@@ -379,48 +515,45 @@ p {
     gap: var(--space-sm);
     font-family: 'Poppins', sans-serif;
     letter-spacing: 0.3px;
+    position: relative;
+    overflow: hidden;
 }
 
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-color), var(--primary-strong));
     color: white;
-    box-shadow: var(--shadow-brown);
+    box-shadow: 0 4px 20px rgba(139, 111, 71, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .btn-primary:hover {
-    background: var(--color-brown-hover);
-    transform: translateY(-3px);
-    box-shadow: 0 14px 36px rgba(139, 111, 71, 0.35);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 8px 30px rgba(139, 111, 71, 0.4);
 }
 
 .btn-primary:active {
-    transform: translateY(-1px);
+    transform: translateY(-1px) scale(0.98);
 }
 
 .btn-secondary {
-    background-color: var(--surface-color);
-    color: var(--dark-color);
-    border: 1.5px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    color: var(--primary-color);
+    border: 1.5px solid rgba(139, 111, 71, 0.3);
+    box-shadow: 0 2px 12px rgba(139, 111, 71, 0.1);
 }
 
 .btn-secondary:hover {
-    background-color: var(--accent-color);
-    color: var(--dark-color);
+    background: rgba(255, 255, 255, 1);
+    border-color: var(--primary-color);
     transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 6px 20px rgba(139, 111, 71, 0.2);
 }
 
 .btn-large {
     padding: var(--space-md) var(--space-2xl);
     font-size: 1.1rem;
     width: 100%;
-}
-
-/* About Section */
-.about {
-    padding: 100px 20px;
-    background: linear-gradient(180deg, #f8f2e9 0%, #fdfaf5 100%);
 }
 
 .about h2,
@@ -439,9 +572,39 @@ p {
 /* ===== ABOUT SECTION ===== */
 .about {
     padding: 100px 20px;
-    background: var(--color-panna);
+    background: linear-gradient(180deg, var(--color-panna) 0%, #f6f0e6 100%);
     position: relative;
     z-index: 1;
+}
+
+/* ===== SECTION DIVIDERS ===== */
+.rooms::before,
+.booking::before,
+.reviews::before,
+.contact::before,
+.footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    max-width: 600px;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(139, 111, 71, 0.25) 20%,
+        rgba(139, 111, 71, 0.4) 50%,
+        rgba(139, 111, 71, 0.25) 80%,
+        transparent 100%);
+}
+
+.rooms,
+.booking,
+.reviews,
+.contact,
+.footer {
+    position: relative;
 }
 
 .about-grid {
@@ -451,14 +614,14 @@ p {
 }
 
 .about-card {
-    background: rgba(253, 250, 245, 0.9);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(229, 215, 199, 0.8);
+    background: #F5EFE7;
+    border: 1px solid #e5d7c7;
     padding: 2.5rem;
     border-radius: var(--border-radius);
     text-align: center;
     box-shadow: var(--shadow-md);
-    transition: var(--transition);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
 }
@@ -468,7 +631,7 @@ p {
     position: absolute;
     top: 0; left: 0;
     width: 100%; height: 4px;
-    background: var(--color-brown-primary);
+    background: var(--primary-color);
     transform: scaleX(0);
     transform-origin: left;
     transition: transform var(--transition-slow);
@@ -479,10 +642,8 @@ p {
 }
 
 .about-card:hover {
-    transform: translateY(-12px);
-    background: rgba(253, 250, 245, 0.98);
+    transform: translate3d(0, -10px, 0);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(201, 165, 121, 0.6);
 }
 
 .icon-box {
@@ -515,7 +676,7 @@ p {
 /* ===== ROOMS SECTION ===== */
 .rooms {
     padding: 100px 20px;
-    background: linear-gradient(180deg, #fdfaf5 0%, #f3e9dc 100%);
+    background: linear-gradient(180deg, #f6f0e6 0%, #f3e9dc 100%);
 }
 
 .rooms-grid {
@@ -525,21 +686,19 @@ p {
 }
 
 .room-card {
-    background: rgba(253, 250, 245, 0.9);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(229, 215, 199, 0.8);
+    background: #fdfaf5;
+    border: 1px solid rgba(229, 215, 199, 0.9);
     border-radius: var(--border-radius);
     overflow: hidden;
     box-shadow: var(--shadow-md);
-    transition: var(--transition);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
 }
 
 .room-card:hover {
-    transform: translateY(-15px);
-    background: rgba(253, 250, 245, 0.98);
+    transform: translate3d(0, -10px, 0);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(201, 165, 121, 0.6);
 }
 
 .room-image-wrapper {
@@ -580,6 +739,7 @@ p {
 
 .room-info {
     padding: var(--space-xl);
+    background: #fff;
 }
 
 .room-info h3 {
@@ -656,7 +816,7 @@ p {
 /* ===== BOOKING SECTION ===== */
 .booking {
     padding: 100px 20px;
-    background: linear-gradient(180deg, #f3e9dc 0%, #fdfaf5 100%);
+    background: linear-gradient(180deg, #f3e9dc 0%, var(--color-panna) 100%);
 }
 
 .booking-container {
@@ -672,8 +832,6 @@ p {
     padding: 2.5rem;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-md);
-    animation: fadeInUp 0.8s ease-out 0.2s forwards;
-    opacity: 0;
 }
 
 .form-row {
@@ -824,8 +982,6 @@ p {
     padding: 2rem;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-md);
-    animation: fadeInUp 0.8s ease-out 0.4s forwards;
-    opacity: 0;
     border-top: 4px solid var(--color-brown-primary);
 }
 
@@ -867,7 +1023,7 @@ p {
 /* ===== REVIEWS SECTION ===== */
 .reviews {
     padding: 100px 20px;
-    background: linear-gradient(180deg, #fdfaf5 0%, #f7efe3 100%);
+    background: linear-gradient(180deg, var(--color-panna) 0%, #f6f0e6 100%);
 }
 
 .reviews-grid {
@@ -883,7 +1039,8 @@ p {
     padding: 2.5rem;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-md);
-    transition: var(--transition);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     border-left: 5px solid var(--primary-color);
     position: relative;
     overflow: hidden;
@@ -899,10 +1056,8 @@ p {
 }
 
 .review-card:hover {
-    transform: translateY(-12px);
-    background: rgba(253, 250, 245, 0.98);
+    transform: translate3d(0, -12px, 0);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(201, 165, 121, 0.6);
 }
 
 .review-card .stars {
@@ -929,7 +1084,7 @@ p {
 /* ===== CONTACT SECTION ===== */
 .contact {
     padding: 100px 20px;
-    background: linear-gradient(180deg, #f7efe3 0%, #fdfaf5 100%);
+    background: linear-gradient(180deg, #f6f0e6 0%, var(--color-panna) 100%);
 }
 
 .contact-grid {
@@ -948,7 +1103,8 @@ p {
     border-radius: var(--border-radius);
     text-align: center;
     box-shadow: var(--shadow-md);
-    transition: var(--transition);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     overflow: hidden;
 }
@@ -968,10 +1124,8 @@ p {
 }
 
 .contact-item:hover {
-    transform: translateY(-12px);
-    background: rgba(253, 250, 245, 0.98);
+    transform: translate3d(0, -12px, 0);
     box-shadow: var(--shadow-lg);
-    border-color: rgba(201, 165, 121, 0.6);
 }
 
 .contact-icon {
@@ -1002,8 +1156,8 @@ p {
 
 /* ===== FOOTER ===== */
 .footer {
-    background: var(--color-footer-bg);
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--color-panna);
+    color: var(--text-color);
     text-align: center;
     padding: var(--space-2xl);
     position: relative;
@@ -1014,7 +1168,7 @@ p {
     margin-bottom: var(--space-md);
     font-family: 'Poppins', sans-serif;
     font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--muted-text);
 }
 
 .social-links {
@@ -1024,21 +1178,21 @@ p {
 }
 
 .social-links a {
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--primary-color);
     text-decoration: none;
     font-size: 1.2rem;
-    transition: background var(--transition-base), color var(--transition-base), transform var(--transition-base);
+    transition: all var(--transition-base);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(139, 111, 71, 0.1);
 }
 
 .social-links a:hover {
-    background: var(--color-brown-primary);
+    background: var(--primary-color);
     color: white;
     transform: translateY(-3px);
 }

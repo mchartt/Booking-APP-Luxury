@@ -24,6 +24,7 @@ header('X-Frame-Options: DENY', true);
 header('Cross-Origin-Resource-Policy: same-origin', true);
 
 require_once '../config.php';
+require_once __DIR__ . '/stripe-constants.php';
 
 // ===== CSRF TOKEN GENERATION =====
 // Genera token CSRF all'avvio della sessione (se non esiste)
@@ -523,11 +524,26 @@ function validateBookingId($bookingId) {
 }
 
 /**
- * La valuta autorevole per i pagamenti Stripe.
+ * La valuta autorevole di default per i pagamenti Stripe.
  * Le prenotazioni sono memorizzate in EUR nel database.
+ *
+ * @return string Codice valuta Stripe (ISO 4217 in lowercase).
+ */
+function getStripeDefaultCurrency() {
+    return STRIPE_DEFAULT_CURRENCY;
+}
+
+/**
+ * @deprecated Usa getStripeDefaultCurrency() per chiarezza.
+ *
+ * Wrapper mantenuto per retrocompatibilità: il nome suggerisce una
+ * valuta dipendente dalla singola prenotazione, ma in realtà la
+ * valuta è globale (EUR) per tutte le prenotazioni.
+ *
+ * @return string Codice valuta Stripe di default.
  */
 function getBookingStripeCurrency() {
-    return 'eur';
+    return getStripeDefaultCurrency();
 }
 
 /**
@@ -576,7 +592,7 @@ function confirmStripePayment($data) {
         }
 
         $expectedAmountInCents = (int) round($bookingCheck['booking']['amount'] * 100);
-        $expectedCurrency = getBookingStripeCurrency();
+        $expectedCurrency = getStripeDefaultCurrency();
 
         // Verifica che Stripe sia configurato
         if (empty($stripeSecretKey) || strpos($stripeSecretKey, 'XXXX') !== false) {

@@ -24,6 +24,7 @@ header('X-Frame-Options: DENY', true);
 header('Cross-Origin-Resource-Policy: same-origin', true);
 
 require_once '../config.php';
+require_once __DIR__ . '/stripe-constants.php';
 
 // ===== CSRF TOKEN GENERATION =====
 // Genera token CSRF all'avvio della sessione (se non esiste)
@@ -523,6 +524,29 @@ function validateBookingId($bookingId) {
 }
 
 /**
+ * La valuta autorevole di default per i pagamenti Stripe.
+ * Le prenotazioni sono memorizzate in EUR nel database.
+ *
+ * @return string Codice valuta Stripe (ISO 4217 in lowercase).
+ */
+function getStripeDefaultCurrency() {
+    return STRIPE_DEFAULT_CURRENCY;
+}
+
+/**
+ * @deprecated Usa getStripeDefaultCurrency() per chiarezza.
+ *
+ * Wrapper mantenuto per retrocompatibilità: il nome suggerisce una
+ * valuta dipendente dalla singola prenotazione, ma in realtà la
+ * valuta è globale (EUR) per tutte le prenotazioni.
+ *
+ * @return string Codice valuta Stripe di default.
+ */
+function getBookingStripeCurrency() {
+    return getStripeDefaultCurrency();
+}
+
+/**
  * Conferma pagamento Stripe dopo completamento frontend
  *
  * PCI-DSS COMPLIANT: Questa funzione NON riceve MAI dati carta.
@@ -556,6 +580,19 @@ function confirmStripePayment($data) {
             ]);
             return;
         }
+
+        $bookingCheck = checkBookingForPayment($bookingId);
+        if ($bookingCheck['valid'] !== true || empty($bookingCheck['booking'])) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => $bookingCheck['errors'][0] ?? 'Prenotazione non valida'
+            ]);
+            return;
+        }
+
+        $expectedAmountInCents = (int) round($bookingCheck['booking']['amount'] * 100);
+        $expectedCurrency = getStripeDefaultCurrency();
 
         // Verifica che Stripe sia configurato
         if (empty($stripeSecretKey) || strpos($stripeSecretKey, 'XXXX') !== false) {
@@ -596,6 +633,16 @@ function confirmStripePayment($data) {
             return;
         }
 
+        if ((int) $paymentIntent->amount !== $expectedAmountInCents || strtolower($paymentIntent->currency ?? '') !== $expectedCurrency) {
+            error_log("Stripe amount/currency mismatch: booking=$bookingId expected_amount=$expectedAmountInCents expected_currency=$expectedCurrency actual_amount={$paymentIntent->amount} actual_currency={$paymentIntent->currency}");
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Importo o valuta del pagamento non validi'
+            ]);
+            return;
+        }
+
         // Pagamento confermato! Aggiorna il database
         $conn->begin_transaction();
 
@@ -626,7 +673,7 @@ function confirmStripePayment($data) {
             ON DUPLICATE KEY UPDATE status = 'completed', card_last_four = ?, card_brand = ?");
 
         if ($stmt) {
-            $amount = $paymentIntent->amount / 100; // Da centesimi a euro
+            $amount = $bookingCheck['booking']['amount'];
             $stmt->bind_param("ssdssss",
                 $bookingId,
                 $paymentIntentId,
@@ -648,7 +695,7 @@ function confirmStripePayment($data) {
             'message' => 'Pagamento confermato con successo',
             'transaction_id' => $paymentIntentId,
             'payment_method' => 'card',
-            'amount' => $paymentIntent->amount / 100
+            'amount' => $bookingCheck['booking']['amount']
         ]);
 
     } catch (\Stripe\Exception\InvalidRequestException $e) {

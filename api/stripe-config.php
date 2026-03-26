@@ -18,6 +18,7 @@ require_once __DIR__ . '/security_headers.php';
 header('Content-Type: application/json; charset=utf-8');
 
 require_once '../config.php';
+require_once __DIR__ . '/stripe-constants.php';
 
 // Carica Stripe SDK via Composer (se disponibile) o configurazione manuale
 // In produzione: composer require stripe/stripe-php
@@ -110,18 +111,15 @@ $errors = [];
 $bookingId = trim($input['booking_id'] ?? '');
 // ZERO-TRUST: L'importo NON viene accettato dal client
 // Viene recuperato esclusivamente dal database
-$currency = strtolower(trim($input['currency'] ?? 'eur'));
 $description = trim($input['description'] ?? '');
 $customerEmail = trim($input['customer_email'] ?? '');
+// La valuta di Stripe deve essere determinata esclusivamente dal server.
+// Le prenotazioni vengono memorizzate in EUR, quindi non accettiamo override dal client.
+$currency = STRIPE_DEFAULT_CURRENCY;
 
 // Validazione booking_id
 if (empty($bookingId) || !preg_match('/^BK\d{14}_[a-f0-9]{8}$/i', $bookingId)) {
     $errors[] = 'ID prenotazione non valido';
-}
-
-// Validazione valuta (supportiamo solo EUR per ora)
-if (!in_array($currency, ['eur', 'usd', 'gbp'])) {
-    $currency = 'eur';
 }
 
 // Validazione email
